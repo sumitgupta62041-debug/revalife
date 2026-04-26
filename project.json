@@ -1,0 +1,26 @@
+{
+  "overview": "revAlife is a premium Indian health & wellness e-commerce platform with a full product catalog, shopping cart, checkout, user accounts, an AI health assistant, and an admin panel for managing products — all designed with a mobile-first, clean white and green aesthetic.",
+  "features": [
+    "Admin panel to add, edit, and delete products with image uploads",
+    "8–10 pre-seeded Indian wellness products across multiple categories",
+    "Full checkout with UPI, Card, Netbanking, and COD options",
+    "Internet Identity login with My Account, order history, and saved addresses",
+    "Rule-based AI Health Assistant for FAQ and product guidance",
+    "Product recommendation engine based on lifestyle and wellness goals",
+    "WhatsApp click-to-chat support link",
+    "Footer pages: About, Science, Contact, Privacy, Terms, FAQs, Shipping, Returns, Order Tracking",
+    "Mobile-first white and green design with trust badges and clean typography"
+  ],
+  "category": "e-commerce",
+  "tags": [
+    "health",
+    "wellness",
+    "india",
+    "ecommerce",
+    "admin",
+    "supplements",
+    "ayurveda",
+    "nutrition"
+  ],
+  "last_updated": "2026-04-21T08:10:30.012Z"
+}

@@ -1,0 +1,117 @@
+// Version: 1.0.0
+type Address__953786501 =
+  {city : Text; line1 : Text; line2 : Text; pincode : Text; state : Text};
+type CartItem__113002840 =
+  {
+    addedAt : Time__900049286;
+    productId : Text;
+    quantity : Nat;
+    userId : Principal
+  };
+type CustomerDetails__1020032844 = {email : Text; name : Text; phone : Text};
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type Int__270357528 = Int__616954475;
+type Int__616954475 = Int;
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type List__415060402<T> = List__790383201<T>;
+type List__790383201<T> =
+  {
+    var blockIndex : Nat__490723111;
+    var blocks : [var [var ?T]];
+    var elementIndex : Nat__490723111
+  };
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type OrderStatus__838108808 =
+  {#cancelled; #confirmed; #delivered; #pending; #shipped};
+type Order__762448211 =
+  {
+    createdAt : Time__900049286;
+    customerDetails : CustomerDetails__1020032844;
+    items : [ProductWithQuantity__778156581];
+    orderId : Text;
+    orderStatus : OrderStatus__838108808;
+    paymentMethod : PaymentMethod__68978920;
+    shippingAddress : Address__953786501;
+    totalAmount : Nat;
+    updatedAt : Time__900049286;
+    userId : Principal
+  };
+type PaymentMethod__68978920 = {#card; #cod; #netbanking; #upi};
+type ProductCategory__686245569 =
+  {
+    #ayurvedicCare;
+    #digestiveHealth;
+    #fitness;
+    #herbalSupplements;
+    #immunity;
+    #multivitamins
+  };
+type ProductWithQuantity__778156581 =
+  {price : Nat; product : Product__853085059; quantity : Nat};
+type Product__853085059 =
+  {
+    benefits : [Text];
+    category : ProductCategory__686245569;
+    featured : Bool;
+    fullDescription : Text;
+    howToUse : Text;
+    id : Text;
+    imageUrl : Text;
+    inStock : Bool;
+    ingredients : [Text];
+    name : Text;
+    price : Nat;
+    safetyInfo : Text;
+    shortDescription : Text
+  };
+type Time__796480547 = Int__270357528;
+type Time__900049286 = Time__796480547;
+type UserProfile__491224006 =
+  {
+    createdAt : Time__900049286;
+    email : Text;
+    name : Text;
+    phone : Text;
+    savedAddresses : [Address__953786501];
+    userId : Principal
+  };
+type UserRole__1073662873 = {#admin; #guest; #user};
+actor {
+  stable accessControlState :
+    {
+      var adminAssigned : Bool;
+      userRoles : Map__605269027<Principal, UserRole__1073662873>
+    };
+  stable carts :
+    {
+      var root :
+        Node__46230540<Principal, List__415060402<CartItem__113002840>>;
+      var size : Nat__490723111
+    };
+  stable orders :
+    {
+      var root : Node__46230540<Text, Order__762448211>;
+      var size : Nat__490723111
+    };
+  stable products :
+    {
+      var root : Node__46230540<Text, Product__853085059>;
+      var size : Nat__490723111
+    };
+  stable var seedDone : Bool;
+  stable userProfiles :
+    {
+      var root : Node__46230540<Principal, UserProfile__491224006>;
+      var size : Nat__490723111
+    }
+};

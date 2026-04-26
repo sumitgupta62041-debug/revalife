@@ -1,0 +1,173 @@
+type _ImmutableObjectStorageRefillResult = 
+ record {
+   success: opt bool;
+   topped_up_amount: opt nat;
+ };
+type _ImmutableObjectStorageRefillInformation = record {
+                                                  proposed_top_up_amount:
+                                                   opt nat;};
+type _ImmutableObjectStorageCreateCertificateResult = 
+ record {
+   blob_hash: text;
+   method: text;
+ };
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type UserProfile = 
+ record {
+   createdAt: Time;
+   email: text;
+   name: text;
+   phone: text;
+   savedAddresses: vec Address;
+   userId: principal;
+ };
+type Time = int;
+type ProductWithQuantity = 
+ record {
+   price: nat;
+   product: Product;
+   quantity: nat;
+ };
+type ProductInput = 
+ record {
+   benefits: text;
+   category: ProductCategory;
+   description: text;
+   howToUse: text;
+   imageUrl: text;
+   ingredients: text;
+   isFeatured: bool;
+   name: text;
+   price: nat;
+   safetyInfo: text;
+   stock: nat;
+ };
+type ProductCategory = 
+ variant {
+   ayurvedicCare;
+   digestiveHealth;
+   fitness;
+   herbalSupplements;
+   immunity;
+   multivitamins;
+ };
+type Product = 
+ record {
+   benefits: vec text;
+   category: ProductCategory;
+   featured: bool;
+   fullDescription: text;
+   howToUse: text;
+   id: text;
+   imageUrl: text;
+   inStock: bool;
+   ingredients: vec text;
+   name: text;
+   price: nat;
+   safetyInfo: text;
+   shortDescription: text;
+ };
+type PaymentMethod = 
+ variant {
+   card;
+   cod;
+   netbanking;
+   upi;
+ };
+type OrderStatus = 
+ variant {
+   cancelled;
+   confirmed;
+   delivered;
+   pending;
+   shipped;
+ };
+type Order = 
+ record {
+   createdAt: Time;
+   customerDetails: CustomerDetails;
+   items: vec ProductWithQuantity;
+   orderId: text;
+   orderStatus: OrderStatus;
+   paymentMethod: PaymentMethod;
+   shippingAddress: Address;
+   totalAmount: nat;
+   updatedAt: Time;
+   userId: principal;
+ };
+type CustomerDetails = 
+ record {
+   email: text;
+   name: text;
+   phone: text;
+ };
+type CafResult_1 = 
+ variant {
+   err: text;
+   ok;
+ };
+type CafResult = 
+ variant {
+   err: text;
+   ok: Product;
+ };
+type Address = 
+ record {
+   city: text;
+   line1: text;
+   line2: text;
+   pincode: text;
+   state: text;
+ };
+service : {
+  _immutableObjectStorageBlobsAreLive: (hashes: vec blob) -> (vec bool) query;
+  _immutableObjectStorageBlobsToDelete: () -> (vec blob) query;
+  _immutableObjectStorageConfirmBlobDeletion: (blobs: vec blob) -> ();
+  _immutableObjectStorageCreateCertificate: (blobHash: text) ->
+   (_ImmutableObjectStorageCreateCertificateResult);
+  _immutableObjectStorageRefillCashier: (refillInformation:
+   opt _ImmutableObjectStorageRefillInformation) ->
+   (_ImmutableObjectStorageRefillResult);
+  _immutableObjectStorageUpdateGatewayPrincipals: () -> ();
+  _initializeAccessControl: () -> ();
+  addProduct: (product: Product) -> ();
+  addSavedAddress: (address: Address) -> ();
+  addToCart: (productId: text, quantity: nat) -> ();
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  clearCart: () -> ();
+  createOrUpdateProfile: (name: text, email: text, phone: text) -> ();
+  createOrder: (customerDetails: CustomerDetails, shippingAddress: Address,
+   paymentMethod: PaymentMethod) -> (text);
+  createProduct: (input: ProductInput) -> (CafResult);
+  deleteProduct: (id: text) -> (CafResult_1);
+  deleteSavedAddress: (index: nat) -> ();
+  getCallerUserProfile: () -> (opt UserProfile) query;
+  getCallerUserRole: () -> (UserRole) query;
+  getCart: () ->
+   (record {
+      items: vec ProductWithQuantity;
+      subtotal: nat;
+    }) query;
+  getFeaturedProducts: () -> (vec Product) query;
+  getOrderById: (orderId: text) -> (Order) query;
+  getProduct: (id: text) -> (Product) query;
+  getUserOrders: () -> (vec Order) query;
+  getUserProfile: (user: principal) -> (opt UserProfile) query;
+  isAdmin: () -> (bool) query;
+  isCallerAdmin: () -> (bool) query;
+  listAllProductsAdmin: () -> (vec Product) query;
+  listProducts: (category: opt ProductCategory) -> (vec Product) query;
+  removeFromCart: (productId: text) -> ();
+  saveCallerUserProfile: (profile: UserProfile) -> ();
+  setFeatured: (id: text, featured: bool) -> (CafResult_1);
+  updateCartItemQuantity: (productId: text, quantity: nat) -> ();
+  updateOrderStatus: (orderId: text, newStatus: OrderStatus) -> ();
+  updateProduct: (id: text, input: ProductInput) -> (CafResult);
+  updateProductStock: (productId: text, inStock: bool) -> ();
+  updateSavedAddress: (index: nat, address: Address) -> ();
+}
