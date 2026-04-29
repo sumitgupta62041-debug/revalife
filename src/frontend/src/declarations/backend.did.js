@@ -54,6 +54,7 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const CafResult_1 = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
 export const CustomerDetails = IDL.Record({
   'name' : IDL.Text,
   'email' : IDL.Text,
@@ -79,21 +80,7 @@ export const ProductInput = IDL.Record({
   'ingredients' : IDL.Text,
 });
 export const CafResult = IDL.Variant({ 'ok' : Product, 'err' : IDL.Text });
-export const CafResult_1 = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
 export const Time = IDL.Int;
-export const UserProfile = IDL.Record({
-  'userId' : IDL.Principal,
-  'name' : IDL.Text,
-  'createdAt' : Time,
-  'savedAddresses' : IDL.Vec(Address),
-  'email' : IDL.Text,
-  'phone' : IDL.Text,
-});
-export const ProductWithQuantity = IDL.Record({
-  'quantity' : IDL.Nat,
-  'price' : IDL.Nat,
-  'product' : Product,
-});
 export const OrderStatus = IDL.Variant({
   'shipped' : IDL.Null,
   'cancelled' : IDL.Null,
@@ -101,8 +88,33 @@ export const OrderStatus = IDL.Variant({
   'delivered' : IDL.Null,
   'confirmed' : IDL.Null,
 });
+export const ReturnReason = IDL.Variant({
+  'DamagedInShipment' : IDL.Null,
+  'WrongProduct' : IDL.Null,
+  'Defective' : IDL.Null,
+});
+export const ReturnRequest = IDL.Record({
+  'status' : IDL.Variant({
+    'pending' : IDL.Null,
+    'approved' : IDL.Null,
+    'rejected' : IDL.Null,
+  }),
+  'requestId' : IDL.Text,
+  'requestType' : IDL.Variant({
+    'replace' : IDL.Null,
+    'returnItem' : IDL.Null,
+  }),
+  'requestedAt' : Time,
+  'reason' : ReturnReason,
+});
+export const ProductWithQuantity = IDL.Record({
+  'quantity' : IDL.Nat,
+  'price' : IDL.Nat,
+  'product' : Product,
+});
 export const Order = IDL.Record({
   'paymentMethod' : PaymentMethod,
+  'deliveredAt' : IDL.Opt(Time),
   'orderStatus' : OrderStatus,
   'userId' : IDL.Principal,
   'createdAt' : Time,
@@ -111,8 +123,19 @@ export const Order = IDL.Record({
   'totalAmount' : IDL.Nat,
   'customerDetails' : CustomerDetails,
   'shippingAddress' : Address,
+  'returnRequests' : IDL.Vec(ReturnRequest),
+  'cancelReason' : IDL.Opt(IDL.Text),
   'items' : IDL.Vec(ProductWithQuantity),
 });
+export const UserProfile = IDL.Record({
+  'userId' : IDL.Principal,
+  'name' : IDL.Text,
+  'createdAt' : Time,
+  'savedAddresses' : IDL.Vec(Address),
+  'email' : IDL.Text,
+  'phone' : IDL.Text,
+});
+export const CafResult_2 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
 
 export const idlService = IDL.Service({
   '_immutableObjectStorageBlobsAreLive' : IDL.Func(
@@ -146,6 +169,9 @@ export const idlService = IDL.Service({
   'addSavedAddress' : IDL.Func([Address], [], []),
   'addToCart' : IDL.Func([IDL.Text, IDL.Nat], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'canCancelOrder' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+  'canReturnOrder' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+  'cancelOrder' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [CafResult_1], []),
   'clearCart' : IDL.Func([], [], []),
   'createOrUpdateProfile' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'createOrder' : IDL.Func(
@@ -156,6 +182,19 @@ export const idlService = IDL.Service({
   'createProduct' : IDL.Func([ProductInput], [CafResult], []),
   'deleteProduct' : IDL.Func([IDL.Text], [CafResult_1], []),
   'deleteSavedAddress' : IDL.Func([IDL.Nat], [], []),
+  'getAllOrders' : IDL.Func([], [IDL.Vec(Order)], ['query']),
+  'getAnalyticsSummary' : IDL.Func(
+      [],
+      [
+        IDL.Record({
+          'totalProducts' : IDL.Nat,
+          'totalOrders' : IDL.Nat,
+          'totalRevenue' : IDL.Nat,
+          'avgOrderValue' : IDL.Nat,
+        }),
+      ],
+      ['query'],
+    ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getCart' : IDL.Func(
@@ -170,7 +209,32 @@ export const idlService = IDL.Service({
     ),
   'getFeaturedProducts' : IDL.Func([], [IDL.Vec(Product)], ['query']),
   'getOrderById' : IDL.Func([IDL.Text], [Order], ['query']),
+  'getOrdersByDay' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+      ['query'],
+    ),
+  'getOrdersByStatus' : IDL.Func(
+      [],
+      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+      ['query'],
+    ),
+  'getPaymentMethodBreakdown' : IDL.Func(
+      [],
+      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+      ['query'],
+    ),
   'getProduct' : IDL.Func([IDL.Text], [Product], ['query']),
+  'getRevenueByDay' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+      ['query'],
+    ),
+  'getTopSellingProducts' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Nat))],
+      ['query'],
+    ),
   'getUserOrders' : IDL.Func([], [IDL.Vec(Order)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
@@ -186,6 +250,8 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'removeFromCart' : IDL.Func([IDL.Text], [], []),
+  'requestReplace' : IDL.Func([IDL.Text, ReturnReason], [CafResult_2], []),
+  'requestReturn' : IDL.Func([IDL.Text, ReturnReason], [CafResult_2], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'setFeatured' : IDL.Func([IDL.Text, IDL.Bool], [CafResult_1], []),
   'updateCartItemQuantity' : IDL.Func([IDL.Text, IDL.Nat], [], []),
@@ -244,6 +310,7 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
+  const CafResult_1 = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const CustomerDetails = IDL.Record({
     'name' : IDL.Text,
     'email' : IDL.Text,
@@ -269,21 +336,7 @@ export const idlFactory = ({ IDL }) => {
     'ingredients' : IDL.Text,
   });
   const CafResult = IDL.Variant({ 'ok' : Product, 'err' : IDL.Text });
-  const CafResult_1 = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const Time = IDL.Int;
-  const UserProfile = IDL.Record({
-    'userId' : IDL.Principal,
-    'name' : IDL.Text,
-    'createdAt' : Time,
-    'savedAddresses' : IDL.Vec(Address),
-    'email' : IDL.Text,
-    'phone' : IDL.Text,
-  });
-  const ProductWithQuantity = IDL.Record({
-    'quantity' : IDL.Nat,
-    'price' : IDL.Nat,
-    'product' : Product,
-  });
   const OrderStatus = IDL.Variant({
     'shipped' : IDL.Null,
     'cancelled' : IDL.Null,
@@ -291,8 +344,33 @@ export const idlFactory = ({ IDL }) => {
     'delivered' : IDL.Null,
     'confirmed' : IDL.Null,
   });
+  const ReturnReason = IDL.Variant({
+    'DamagedInShipment' : IDL.Null,
+    'WrongProduct' : IDL.Null,
+    'Defective' : IDL.Null,
+  });
+  const ReturnRequest = IDL.Record({
+    'status' : IDL.Variant({
+      'pending' : IDL.Null,
+      'approved' : IDL.Null,
+      'rejected' : IDL.Null,
+    }),
+    'requestId' : IDL.Text,
+    'requestType' : IDL.Variant({
+      'replace' : IDL.Null,
+      'returnItem' : IDL.Null,
+    }),
+    'requestedAt' : Time,
+    'reason' : ReturnReason,
+  });
+  const ProductWithQuantity = IDL.Record({
+    'quantity' : IDL.Nat,
+    'price' : IDL.Nat,
+    'product' : Product,
+  });
   const Order = IDL.Record({
     'paymentMethod' : PaymentMethod,
+    'deliveredAt' : IDL.Opt(Time),
     'orderStatus' : OrderStatus,
     'userId' : IDL.Principal,
     'createdAt' : Time,
@@ -301,8 +379,19 @@ export const idlFactory = ({ IDL }) => {
     'totalAmount' : IDL.Nat,
     'customerDetails' : CustomerDetails,
     'shippingAddress' : Address,
+    'returnRequests' : IDL.Vec(ReturnRequest),
+    'cancelReason' : IDL.Opt(IDL.Text),
     'items' : IDL.Vec(ProductWithQuantity),
   });
+  const UserProfile = IDL.Record({
+    'userId' : IDL.Principal,
+    'name' : IDL.Text,
+    'createdAt' : Time,
+    'savedAddresses' : IDL.Vec(Address),
+    'email' : IDL.Text,
+    'phone' : IDL.Text,
+  });
+  const CafResult_2 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
   
   return IDL.Service({
     '_immutableObjectStorageBlobsAreLive' : IDL.Func(
@@ -336,6 +425,9 @@ export const idlFactory = ({ IDL }) => {
     'addSavedAddress' : IDL.Func([Address], [], []),
     'addToCart' : IDL.Func([IDL.Text, IDL.Nat], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'canCancelOrder' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'canReturnOrder' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'cancelOrder' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [CafResult_1], []),
     'clearCart' : IDL.Func([], [], []),
     'createOrUpdateProfile' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'createOrder' : IDL.Func(
@@ -346,6 +438,19 @@ export const idlFactory = ({ IDL }) => {
     'createProduct' : IDL.Func([ProductInput], [CafResult], []),
     'deleteProduct' : IDL.Func([IDL.Text], [CafResult_1], []),
     'deleteSavedAddress' : IDL.Func([IDL.Nat], [], []),
+    'getAllOrders' : IDL.Func([], [IDL.Vec(Order)], ['query']),
+    'getAnalyticsSummary' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'totalProducts' : IDL.Nat,
+            'totalOrders' : IDL.Nat,
+            'totalRevenue' : IDL.Nat,
+            'avgOrderValue' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getCart' : IDL.Func(
@@ -360,7 +465,32 @@ export const idlFactory = ({ IDL }) => {
       ),
     'getFeaturedProducts' : IDL.Func([], [IDL.Vec(Product)], ['query']),
     'getOrderById' : IDL.Func([IDL.Text], [Order], ['query']),
+    'getOrdersByDay' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+        ['query'],
+      ),
+    'getOrdersByStatus' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+        ['query'],
+      ),
+    'getPaymentMethodBreakdown' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+        ['query'],
+      ),
     'getProduct' : IDL.Func([IDL.Text], [Product], ['query']),
+    'getRevenueByDay' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+        ['query'],
+      ),
+    'getTopSellingProducts' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Nat))],
+        ['query'],
+      ),
     'getUserOrders' : IDL.Func([], [IDL.Vec(Order)], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
@@ -376,6 +506,8 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'removeFromCart' : IDL.Func([IDL.Text], [], []),
+    'requestReplace' : IDL.Func([IDL.Text, ReturnReason], [CafResult_2], []),
+    'requestReturn' : IDL.Func([IDL.Text, ReturnReason], [CafResult_2], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'setFeatured' : IDL.Func([IDL.Text, IDL.Bool], [CafResult_1], []),
     'updateCartItemQuantity' : IDL.Func([IDL.Text, IDL.Nat], [], []),

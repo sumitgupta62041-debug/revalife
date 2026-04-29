@@ -1,39 +1,43 @@
-# Design Brief — revAlife Admin Panel + Store
+# Design Brief — revAlife Premium Wellness E-Commerce
 
-**Purpose:** Premium Indian wellness e-commerce platform with integrated admin panel for product management. Both interfaces share unified design language emphasizing trust, science, and simplicity.
+**Purpose:** Science-backed Indian wellness platform combining premium brand identity with streamlined UX. Unified design across store, authentication, admin, and assistant interfaces emphasizing trust, clarity, and mobile-first accessibility.
 
-**Tone & Differentiation:** Anti-generic, bold wellness identity. White + green palette signals health/growth. Card-based layouts create visual rhythm. Typography hierarchy (General Sans display + Lora body) conveys premium, science-backed brand. No cheap gradients or scammy elements.
+**Tone:** Anti-generic wellness brand. Emerald green accents on white signal health/growth. Card-based rhythm with typography hierarchy (General Sans + Lora) conveys premium, science-backed credentials. Zero cheap gradients or scammy elements.
 
-| **Palette** | OKLCH | Light | Dark |
-|---|---|---|---|
-| Background | 0.9975 0.002 0 | Off-white #FEFDFB | Deep charcoal #141110 |
-| Primary (Wellness Green) | 0.64 0.15 152 | Vibrant teal-green | Bright teal accent |
-| Secondary | 0.85 0.08 152 | Soft green | Light green |
-| Accent | 0.64 0.15 152 | Same as primary | Same as primary |
-| Muted | 0.92 0.01 0 | Light gray #EBE9E6 | Darker gray #4A4744 |
-| Foreground | 0.205 0.002 0 | Dark text #35322F | Light text #F2EEE8 |
-| Sidebar | 0.22 0.01 0 | N/A | Deep green-black #1F1915 |
-| Destructive | 0.64 0.20 29 | Vibrant red accent | Bright red-orange |
+| **Palette** | OKLCH | Role |
+|---|---|---|
+| Background | 0.99 0.001 0 (light) / 0.08 0 0 (dark) | Primary surface |
+| Foreground | 0.2 0.002 0 (light) / 0.95 0.003 0 (dark) | Text |
+| Primary Green | 0.64 0.16 152 (light) / 0.72 0.16 152 (dark) | CTAs, active states |
+| Secondary Green | 0.82 0.08 152 (light) / 0.32 0.08 152 (dark) | Secondary actions |
+| Card | 1 0 0 (light) / 0.13 0.003 0 (dark) | Content containers |
+| Muted | 0.93 0.005 0 (light) / 0.28 0.002 0 (dark) | Placeholders, disabled |
+| Border | 0.92 0.003 0 (light) / 0.24 0.002 0 (dark) | Dividers |
+| Destructive | 0.62 0.22 29 | Alerts, delete actions |
 
 | **Structural Zones** | Treatment |
 |---|---|
-| Header (Store) | `bg-background border-b` white with subtle green accent line |
-| Sidebar (Admin) | `bg-sidebar` deep dark, left nav with primary-colored icons/active states |
-| Content Area | `bg-background` with `bg-card` sections for modules (product list, forms) |
-| Cards | `bg-card shadow-card` with `rounded-lg` (0.625rem), light border for depth |
-| Forms (Admin) | Card containers with labeled input groups, green primary CTAs, rounded inputs |
-| Footer | `bg-muted/40 border-t` minimal, right-aligned company links |
+| Header | `bg-background border-b` with green accent line; sticky on mobile |
+| Sidebar (Admin) | `bg-sidebar` deep dark with green primary nav indicators |
+| Hero/Content | `bg-background` white/dark background; card sections with `shadow-card` |
+| Product Cards | Image full-width, title/price/badge/CTA bottom; rounded-lg with hover lift |
+| Auth Modal | Centered overlay with fade-in; form-first, green primary CTA |
+| Right Drawer (Cart) | Position fixed top-0 right-0 h-full w-[380px]; overlay behind; slide-in from right |
+| Forms | Stacked inputs, green primary buttons, rounded borders, clear labels |
+| Footer | `bg-muted/20 border-t` minimal links, centered on mobile |
 
-**Typography:** General Sans (display heads, buttons, labels) + Lora (body copy, descriptions) + Geist Mono (data/code). 3-tier hierarchy: h1 (2rem, bold), body (1rem, regular), label (0.875rem, medium).
+**Typography:** General Sans (display h1–h6, buttons, labels) + Lora (body, descriptions) + Geist Mono (data, code). Scale: h1 2rem, h2 1.5rem, body 1rem, label 0.875rem, caption 0.75rem. Line height body 1.65, display 1.25.
 
-**Shape Language:** 0.625rem rounded cards; 0px sharp corners for data tables; button radii match card radii. Borders 1px, subtle `border-border` color.
+**Shape Language:** Cards 0.75rem radius; inputs/buttons inherit; data tables 0px (sharp). Borders 1px semantic colors. Consistent 8px spacing grid.
 
-**Elevation & Depth:** Shadow hierarchy — `shadow-subtle` (1px) for input focus, `shadow-card` for card containers, `shadow-elevated` for modals/dropdowns. No glows; no neon; minimal transparency.
+**Elevation:** `shadow-subtle` (input focus), `shadow-card` (containers), `shadow-elevated` (modals, drawers). Shadows use OKLCH blacks—no cheap color overlays.
 
-**Component Patterns:** CTA buttons use `bg-wellness-green text-white`, secondary buttons `border border-border text-foreground`. Product cards show image + title + price + quick-actions (edit/delete in admin). Forms use stacked layout on mobile, consistent field styling.
+**Components:** Primary CTA `bg-primary text-primary-foreground rounded-lg`. Secondary `border border-border`. Product cards: image + meta + price + badge. Right cart drawer: full height, overlay, quantity controls, checkout buttons. Auth modal: centered, green primary.
 
-**Motion:** `transition-smooth` (0.3s cubic-bezier) for hover/active states. Subtle fade-in + slide-in for new content. No bouncy animations; no parallax.
+**Motion:** `transition-smooth` 0.25s ease (buttons, hovers). Fade-in + slide-in for content. No bouncy/parallax. Drawer slides left-to-right with overlay fade.
 
-**Constraints:** Mobile-first responsive. Light mode primary, dark mode available. No external assets except bundled fonts. Data tables prioritize readability; admin forms optimize for speed (form-first UX).
+**Responsive:** Mobile-first. sm:640px, md:768px, lg:1024px. Cart drawer hidden on mobile; slide-in drawer on tablet+. Sidebar collapses to icon-only on mobile.
 
-**Signature Detail:** Green wellness accent used sparingly — primary CTA only, active nav items, hover states. Restraint signals premium, not budget.
+**Constraints:** Light mode primary (dark available). No external images except bundled fonts. Accessibility: AA+ contrast, semantic HTML, focus-visible outlines. Products load via FALLBACK_PRODUCTS (hardcoded). Cart uses fixed positioning (no dialog element).
+
+**Signature:** Green emerald accent used sparingly—primary CTAs only, active nav items, product badges. Restraint over intensity signals premium wellness brand.

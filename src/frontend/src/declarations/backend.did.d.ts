@@ -21,6 +21,8 @@ export type CafResult = { 'ok' : Product } |
   { 'err' : string };
 export type CafResult_1 = { 'ok' : null } |
   { 'err' : string };
+export type CafResult_2 = { 'ok' : string } |
+  { 'err' : string };
 export interface CustomerDetails {
   'name' : string,
   'email' : string,
@@ -28,6 +30,7 @@ export interface CustomerDetails {
 }
 export interface Order {
   'paymentMethod' : PaymentMethod,
+  'deliveredAt' : [] | [Time],
   'orderStatus' : OrderStatus,
   'userId' : Principal,
   'createdAt' : Time,
@@ -36,6 +39,8 @@ export interface Order {
   'totalAmount' : bigint,
   'customerDetails' : CustomerDetails,
   'shippingAddress' : Address,
+  'returnRequests' : Array<ReturnRequest>,
+  'cancelReason' : [] | [string],
   'items' : Array<ProductWithQuantity>,
 }
 export type OrderStatus = { 'shipped' : null } |
@@ -86,6 +91,19 @@ export interface ProductWithQuantity {
   'price' : bigint,
   'product' : Product,
 }
+export type ReturnReason = { 'DamagedInShipment' : null } |
+  { 'WrongProduct' : null } |
+  { 'Defective' : null };
+export interface ReturnRequest {
+  'status' : { 'pending' : null } |
+    { 'approved' : null } |
+    { 'rejected' : null },
+  'requestId' : string,
+  'requestType' : { 'replace' : null } |
+    { 'returnItem' : null },
+  'requestedAt' : Time,
+  'reason' : ReturnReason,
+}
 export type Time = bigint;
 export interface UserProfile {
   'userId' : Principal,
@@ -133,6 +151,9 @@ export interface _SERVICE {
   'addSavedAddress' : ActorMethod<[Address], undefined>,
   'addToCart' : ActorMethod<[string, bigint], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'canCancelOrder' : ActorMethod<[string], boolean>,
+  'canReturnOrder' : ActorMethod<[string], boolean>,
+  'cancelOrder' : ActorMethod<[string, [] | [string]], CafResult_1>,
   'clearCart' : ActorMethod<[], undefined>,
   'createOrUpdateProfile' : ActorMethod<[string, string, string], undefined>,
   'createOrder' : ActorMethod<
@@ -142,6 +163,16 @@ export interface _SERVICE {
   'createProduct' : ActorMethod<[ProductInput], CafResult>,
   'deleteProduct' : ActorMethod<[string], CafResult_1>,
   'deleteSavedAddress' : ActorMethod<[bigint], undefined>,
+  'getAllOrders' : ActorMethod<[], Array<Order>>,
+  'getAnalyticsSummary' : ActorMethod<
+    [],
+    {
+      'totalProducts' : bigint,
+      'totalOrders' : bigint,
+      'totalRevenue' : bigint,
+      'avgOrderValue' : bigint,
+    }
+  >,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getCart' : ActorMethod<
@@ -150,7 +181,15 @@ export interface _SERVICE {
   >,
   'getFeaturedProducts' : ActorMethod<[], Array<Product>>,
   'getOrderById' : ActorMethod<[string], Order>,
+  'getOrdersByDay' : ActorMethod<[bigint], Array<[string, bigint]>>,
+  'getOrdersByStatus' : ActorMethod<[], Array<[string, bigint]>>,
+  'getPaymentMethodBreakdown' : ActorMethod<[], Array<[string, bigint]>>,
   'getProduct' : ActorMethod<[string], Product>,
+  'getRevenueByDay' : ActorMethod<[bigint], Array<[string, bigint]>>,
+  'getTopSellingProducts' : ActorMethod<
+    [bigint],
+    Array<[string, string, bigint]>
+  >,
   'getUserOrders' : ActorMethod<[], Array<Order>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isAdmin' : ActorMethod<[], boolean>,
@@ -158,6 +197,8 @@ export interface _SERVICE {
   'listAllProductsAdmin' : ActorMethod<[], Array<Product>>,
   'listProducts' : ActorMethod<[[] | [ProductCategory]], Array<Product>>,
   'removeFromCart' : ActorMethod<[string], undefined>,
+  'requestReplace' : ActorMethod<[string, ReturnReason], CafResult_2>,
+  'requestReturn' : ActorMethod<[string, ReturnReason], CafResult_2>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'setFeatured' : ActorMethod<[string, boolean], CafResult_1>,
   'updateCartItemQuantity' : ActorMethod<[string, bigint], undefined>,

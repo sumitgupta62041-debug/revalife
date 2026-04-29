@@ -35,12 +35,15 @@ type OrderStatus__838108808 =
   {#cancelled; #confirmed; #delivered; #pending; #shipped};
 type Order__762448211 =
   {
+    cancelReason : ?Text;
     createdAt : Time__900049286;
     customerDetails : CustomerDetails__1020032844;
+    deliveredAt : ?Time__900049286;
     items : [ProductWithQuantity__778156581];
     orderId : Text;
     orderStatus : OrderStatus__838108808;
     paymentMethod : PaymentMethod__68978920;
+    returnRequests : [ReturnRequest__24608062];
     shippingAddress : Address__953786501;
     totalAmount : Nat;
     updatedAt : Time__900049286;
@@ -73,6 +76,16 @@ type Product__853085059 =
     price : Nat;
     safetyInfo : Text;
     shortDescription : Text
+  };
+type ReturnReason__1060197098 =
+  {#DamagedInShipment; #Defective; #WrongProduct};
+type ReturnRequest__24608062 =
+  {
+    reason : ReturnReason__1060197098;
+    requestId : Text;
+    requestType : {#replace; #returnItem};
+    requestedAt : Time__900049286;
+    status : {#approved; #pending; #rejected}
   };
 type Time__796480547 = Int__270357528;
 type Time__900049286 = Time__796480547;

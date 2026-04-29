@@ -1,26 +1,27 @@
 {
-  "overview": "revAlife is a premium Indian health & wellness e-commerce platform with a full product catalog, shopping cart, checkout, user accounts, an AI health assistant, and an admin panel for managing products — all designed with a mobile-first, clean white and green aesthetic.",
+  "overview": "revAlife is a premium Indian wellness e-commerce platform with 10 science-backed products (Ashwagandha, Moringa, Triphala, and more), complete shopping cart, UPI/COD payments, admin panel, AI Health Assistant, and full order management.",
   "features": [
-    "Admin panel to add, edit, and delete products with image uploads",
-    "8–10 pre-seeded Indian wellness products across multiple categories",
-    "Full checkout with UPI, Card, Netbanking, and COD options",
-    "Internet Identity login with My Account, order history, and saved addresses",
-    "Rule-based AI Health Assistant for FAQ and product guidance",
-    "Product recommendation engine based on lifestyle and wellness goals",
-    "WhatsApp click-to-chat support link",
-    "Footer pages: About, Science, Contact, Privacy, Terms, FAQs, Shipping, Returns, Order Tracking",
-    "Mobile-first white and green design with trust badges and clean typography"
+    "10 Indian wellness products with INR pricing",
+    "Right-side slide-in cart drawer with quantity controls",
+    "User login via clean in-site modal (Flipkart-style)",
+    "UPI and COD payment options",
+    "My Orders with Cancel, Return, Replace actions",
+    "Admin panel with product/order management and analytics",
+    "AI Health Assistant chatbot (rule-based, product-focused)",
+    "Delivery restricted to LPU campus",
+    "Flat ₹15 shipping",
+    "Responsive mobile-first design with green/white premium UI",
+    "All legal and informational footer pages"
   ],
   "category": "e-commerce",
   "tags": [
-    "health",
+    "e-commerce",
     "wellness",
     "india",
-    "ecommerce",
-    "admin",
-    "supplements",
+    "health",
     "ayurveda",
-    "nutrition"
+    "supplements",
+    "shopping"
   ],
-  "last_updated": "2026-04-21T08:10:30.012Z"
+  "last_updated": "2026-04-28T16:59:44.376Z"
 }

@@ -27,6 +27,27 @@ type UserProfile =
    userId: principal;
  };
 type Time = int;
+type ReturnRequest = 
+ record {
+   reason: ReturnReason;
+   requestId: text;
+   requestType: variant {
+                  replace;
+                  returnItem;
+                };
+   requestedAt: Time;
+   status: variant {
+             approved;
+             pending;
+             rejected;
+           };
+ };
+type ReturnReason = 
+ variant {
+   DamagedInShipment;
+   Defective;
+   WrongProduct;
+ };
 type ProductWithQuantity = 
  record {
    price: nat;
@@ -89,12 +110,15 @@ type OrderStatus =
  };
 type Order = 
  record {
+   cancelReason: opt text;
    createdAt: Time;
    customerDetails: CustomerDetails;
+   deliveredAt: opt Time;
    items: vec ProductWithQuantity;
    orderId: text;
    orderStatus: OrderStatus;
    paymentMethod: PaymentMethod;
+   returnRequests: vec ReturnRequest;
    shippingAddress: Address;
    totalAmount: nat;
    updatedAt: Time;
@@ -105,6 +129,11 @@ type CustomerDetails =
    email: text;
    name: text;
    phone: text;
+ };
+type CafResult_2 = 
+ variant {
+   err: text;
+   ok: text;
  };
 type CafResult_1 = 
  variant {
@@ -139,6 +168,9 @@ service : {
   addSavedAddress: (address: Address) -> ();
   addToCart: (productId: text, quantity: nat) -> ();
   assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  canCancelOrder: (orderId: text) -> (bool) query;
+  canReturnOrder: (orderId: text) -> (bool) query;
+  cancelOrder: (orderId: text, reason: opt text) -> (CafResult_1);
   clearCart: () -> ();
   createOrUpdateProfile: (name: text, email: text, phone: text) -> ();
   createOrder: (customerDetails: CustomerDetails, shippingAddress: Address,
@@ -146,6 +178,14 @@ service : {
   createProduct: (input: ProductInput) -> (CafResult);
   deleteProduct: (id: text) -> (CafResult_1);
   deleteSavedAddress: (index: nat) -> ();
+  getAllOrders: () -> (vec Order) query;
+  getAnalyticsSummary: () ->
+   (record {
+      avgOrderValue: nat;
+      totalOrders: nat;
+      totalProducts: nat;
+      totalRevenue: nat;
+    }) query;
   getCallerUserProfile: () -> (opt UserProfile) query;
   getCallerUserRole: () -> (UserRole) query;
   getCart: () ->
@@ -155,7 +195,28 @@ service : {
     }) query;
   getFeaturedProducts: () -> (vec Product) query;
   getOrderById: (orderId: text) -> (Order) query;
+  getOrdersByDay: (days: nat) -> (vec record {
+                                        text;
+                                        nat;
+                                      }) query;
+  getOrdersByStatus: () -> (vec record {
+                                  text;
+                                  nat;
+                                }) query;
+  getPaymentMethodBreakdown: () -> (vec record {
+                                          text;
+                                          nat;
+                                        }) query;
   getProduct: (id: text) -> (Product) query;
+  getRevenueByDay: (days: nat) -> (vec record {
+                                         text;
+                                         nat;
+                                       }) query;
+  getTopSellingProducts: (limit: nat) -> (vec record {
+                                                text;
+                                                text;
+                                                nat;
+                                              }) query;
   getUserOrders: () -> (vec Order) query;
   getUserProfile: (user: principal) -> (opt UserProfile) query;
   isAdmin: () -> (bool) query;
@@ -163,6 +224,8 @@ service : {
   listAllProductsAdmin: () -> (vec Product) query;
   listProducts: (category: opt ProductCategory) -> (vec Product) query;
   removeFromCart: (productId: text) -> ();
+  requestReplace: (orderId: text, reason: ReturnReason) -> (CafResult_2);
+  requestReturn: (orderId: text, reason: ReturnReason) -> (CafResult_2);
   saveCallerUserProfile: (profile: UserProfile) -> ();
   setFeatured: (id: text, featured: bool) -> (CafResult_1);
   updateCartItemQuantity: (productId: text, quantity: nat) -> ();

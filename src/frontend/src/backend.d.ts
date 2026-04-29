@@ -7,11 +7,8 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
-export interface UserProfile {
-    userId: Principal;
+export interface CustomerDetails {
     name: string;
-    createdAt: Time;
-    savedAddresses: Array<Address>;
     email: string;
     phone: string;
 }
@@ -43,8 +40,16 @@ export interface Address {
     state: string;
     pincode: string;
 }
+export interface ReturnRequest {
+    status: Variant_pending_approved_rejected;
+    requestId: string;
+    requestType: Variant_replace_returnItem;
+    requestedAt: Time;
+    reason: ReturnReason;
+}
 export interface Order {
     paymentMethod: PaymentMethod;
+    deliveredAt?: Time;
     orderStatus: OrderStatus;
     userId: Principal;
     createdAt: Time;
@@ -53,11 +58,20 @@ export interface Order {
     totalAmount: bigint;
     customerDetails: CustomerDetails;
     shippingAddress: Address;
+    returnRequests: Array<ReturnRequest>;
+    cancelReason?: string;
     items: Array<ProductWithQuantity>;
 }
 export type CafResult = {
     __kind__: "ok";
     ok: Product;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type CafResult_2 = {
+    __kind__: "ok";
+    ok: string;
 } | {
     __kind__: "err";
     err: string;
@@ -82,8 +96,11 @@ export interface Product {
     price: bigint;
     ingredients: Array<string>;
 }
-export interface CustomerDetails {
+export interface UserProfile {
+    userId: Principal;
     name: string;
+    createdAt: Time;
+    savedAddresses: Array<Address>;
     email: string;
     phone: string;
 }
@@ -108,22 +125,46 @@ export enum ProductCategory {
     multivitamins = "multivitamins",
     herbalSupplements = "herbalSupplements"
 }
+export enum ReturnReason {
+    DamagedInShipment = "DamagedInShipment",
+    WrongProduct = "WrongProduct",
+    Defective = "Defective"
+}
 export enum UserRole {
     admin = "admin",
     user = "user",
     guest = "guest"
+}
+export enum Variant_pending_approved_rejected {
+    pending = "pending",
+    approved = "approved",
+    rejected = "rejected"
+}
+export enum Variant_replace_returnItem {
+    replace = "replace",
+    returnItem = "returnItem"
 }
 export interface backendInterface {
     addProduct(product: Product): Promise<void>;
     addSavedAddress(address: Address): Promise<void>;
     addToCart(productId: string, quantity: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    canCancelOrder(orderId: string): Promise<boolean>;
+    canReturnOrder(orderId: string): Promise<boolean>;
+    cancelOrder(orderId: string, reason: string | null): Promise<CafResult_1>;
     clearCart(): Promise<void>;
     createOrUpdateProfile(name: string, email: string, phone: string): Promise<void>;
     createOrder(customerDetails: CustomerDetails, shippingAddress: Address, paymentMethod: PaymentMethod): Promise<string>;
     createProduct(input: ProductInput): Promise<CafResult>;
     deleteProduct(id: string): Promise<CafResult_1>;
     deleteSavedAddress(index: bigint): Promise<void>;
+    getAllOrders(): Promise<Array<Order>>;
+    getAnalyticsSummary(): Promise<{
+        totalProducts: bigint;
+        totalOrders: bigint;
+        totalRevenue: bigint;
+        avgOrderValue: bigint;
+    }>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getCart(): Promise<{
@@ -132,7 +173,12 @@ export interface backendInterface {
     }>;
     getFeaturedProducts(): Promise<Array<Product>>;
     getOrderById(orderId: string): Promise<Order>;
+    getOrdersByDay(days: bigint): Promise<Array<[string, bigint]>>;
+    getOrdersByStatus(): Promise<Array<[string, bigint]>>;
+    getPaymentMethodBreakdown(): Promise<Array<[string, bigint]>>;
     getProduct(id: string): Promise<Product>;
+    getRevenueByDay(days: bigint): Promise<Array<[string, bigint]>>;
+    getTopSellingProducts(limit: bigint): Promise<Array<[string, string, bigint]>>;
     getUserOrders(): Promise<Array<Order>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isAdmin(): Promise<boolean>;
@@ -140,6 +186,8 @@ export interface backendInterface {
     listAllProductsAdmin(): Promise<Array<Product>>;
     listProducts(category: ProductCategory | null): Promise<Array<Product>>;
     removeFromCart(productId: string): Promise<void>;
+    requestReplace(orderId: string, reason: ReturnReason): Promise<CafResult_2>;
+    requestReturn(orderId: string, reason: ReturnReason): Promise<CafResult_2>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     setFeatured(id: string, featured: boolean): Promise<CafResult_1>;
     updateCartItemQuantity(productId: string, quantity: bigint): Promise<void>;

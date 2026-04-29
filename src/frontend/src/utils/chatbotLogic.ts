@@ -1,299 +1,712 @@
-import { ProductCategory } from "../backend";
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ChatMessage = {
   role: "user" | "bot";
   content: string;
 };
 
-type ConversationState = {
-  stage:
-    | "initial"
-    | "collecting_age"
-    | "collecting_lifestyle"
-    | "collecting_goals"
-    | "complete";
-  ageGroup?: "18-30" | "30-50" | "50+";
-  lifestyle?: "active" | "moderate" | "sedentary";
-  goals?: string[];
+type ConversationContext = {
+  mentionedGoals: string[];
+  recommendedProducts: string[];
+  messageCount: number;
+  lastProductMentioned: string;
+  stage: "open";
 };
 
-let conversationState: ConversationState = { stage: "initial" };
+// ─── Product Catalogue ────────────────────────────────────────────────────────
 
-const faqResponses: Record<string, string> = {
-  safe: "All revAlife products undergo rigorous quality testing and are manufactured in GMP-certified facilities. We test for purity, potency, and contaminants to ensure safety. However, we recommend consulting with a healthcare professional before starting any new supplement.",
-  natural:
-    "We use a combination of natural and scientifically-formulated ingredients. Many of our products contain herbal extracts, vitamins, and minerals sourced from natural sources. Complete ingredient lists are provided on each product page.",
-  ingredients:
-    "Our ingredients are carefully selected based on scientific research and safety profiles. We prioritize ingredients with strong scientific backing and proven efficacy.",
-  usage:
-    "Usage instructions are provided on each product page. Generally, supplements should be taken as directed on the label. Always follow the recommended dosage and consult a healthcare professional if you have questions.",
+type Product = {
+  id: string;
+  name: string;
+  emoji: string;
+  price: number;
+  benefit: string;
+  category: string;
+};
+
+const PRODUCTS: Product[] = [
+  {
+    id: "ashwagandha",
+    name: "Ashwagandha KSM-66 Extract",
+    emoji: "🌿",
+    price: 799,
+    benefit: "stress, energy aur immunity ke liye #1 choice",
+    category: "herbal",
+  },
+  {
+    id: "shilajit",
+    name: "Shilajit Pure Himalayan Resin",
+    emoji: "🏔️",
+    price: 1199,
+    benefit: "deep energy, stamina aur vitality boost",
+    category: "herbal",
+  },
+  {
+    id: "brahmi",
+    name: "Brahmi Brain Booster",
+    emoji: "🧠",
+    price: 649,
+    benefit: "memory, focus aur concentration improve karta hai",
+    category: "herbal",
+  },
+  {
+    id: "moringa",
+    name: "Moringa Superfood Powder",
+    emoji: "🌱",
+    price: 549,
+    benefit: "75+ nutrients, immunity aur energy ka powerhouse",
+    category: "immunity",
+  },
+  {
+    id: "amla",
+    name: "Amla Vitamin C — 500 mg Natural",
+    emoji: "🍋",
+    price: 399,
+    benefit: "natural Vitamin C — immunity aur skin glow",
+    category: "immunity",
+  },
+  {
+    id: "triphala",
+    name: "Triphala Gut Health Capsules",
+    emoji: "💚",
+    price: 449,
+    benefit: "digestion theek karta hai, bloating band",
+    category: "digestion",
+  },
+  {
+    id: "curcumin",
+    name: "Curcumin 95% + BioPerine",
+    emoji: "🌻",
+    price: 699,
+    benefit: "inflammation, joint pain aur immunity",
+    category: "digestion",
+  },
+  {
+    id: "protein",
+    name: "Plant Protein Powder — Vanilla",
+    emoji: "💪",
+    price: 1299,
+    benefit: "muscle build, post-workout recovery",
+    category: "fitness",
+  },
+  {
+    id: "multivitamin",
+    name: "Multivitamin Daily Pack",
+    emoji: "✨",
+    price: 899,
+    benefit: "daily essentials — energy, immunity, overall health",
+    category: "vitamins",
+  },
+  {
+    id: "hairskin",
+    name: "Hair & Skin Nourisher Capsules",
+    emoji: "💆",
+    price: 999,
+    benefit: "hair fall rokta hai, skin glow deta hai",
+    category: "beauty",
+  },
+];
+
+// ─── Module-level context ─────────────────────────────────────────────────────
+
+function createContext(): ConversationContext {
+  return {
+    mentionedGoals: [],
+    recommendedProducts: [],
+    messageCount: 0,
+    lastProductMentioned: "",
+    stage: "open",
+  };
+}
+
+let ctx: ConversationContext = createContext();
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function hasWord(text: string, word: string): boolean {
+  // biome-ignore lint/suspicious/noMisleadingCharacterClass: intentional word boundary
+  return new RegExp(`\\b${word}\\b`, "i").test(text);
+}
+
+const GREETING_KEYWORDS = [
+  "hi",
+  "hii",
+  "hiii",
+  "hiiii",
+  "hello",
+  "hey",
+  "helo",
+  "helloo",
+  "namaste",
+  "namaskar",
+  "hiya",
+  "sup",
+  "hola",
+  "yo",
+  "bhai",
+  "yaar",
+  "kya hal",
+  "kya haal",
+  "kaise ho",
+  "kya chal",
+  "wassup",
+  "what's up",
+  "whats up",
+];
+
+function isGreeting(lower: string): boolean {
+  const clean = lower.trim();
+  if (GREETING_KEYWORDS.some((kw) => clean === kw)) return true;
+  if (
+    GREETING_KEYWORDS.some(
+      (kw) => clean.startsWith(`${kw} `) || clean.startsWith(`${kw},`),
+    )
+  )
+    return true;
+  return false;
+}
+
+function isAcknowledgement(lower: string): boolean {
+  const acks = [
+    "ok",
+    "okay",
+    "theek hai",
+    "theek",
+    "acha",
+    "accha",
+    "hmm",
+    "hm",
+    "shukriya",
+    "thanks",
+    "thank you",
+    "dhanyawad",
+    "nice",
+    "great",
+    "good",
+    "cool",
+    "wah",
+    "waah",
+    "badhiya",
+    "samajh gaya",
+    "samajh gayi",
+    "got it",
+    "understood",
+    "👍",
+  ];
+  const clean = lower.trim();
+  return acks.some(
+    (a) => clean === a || clean === `${a}!` || clean === `${a}.`,
+  );
+}
+
+function isPriceQuery(lower: string): boolean {
+  return (
+    lower.includes("kitna hai") ||
+    lower.includes("kitne ka") ||
+    lower.includes("price") ||
+    lower.includes("cost") ||
+    lower.includes("rate") ||
+    lower.includes("daam") ||
+    lower.includes("paisa") ||
+    lower.includes("paise") ||
+    lower.includes("rupee") ||
+    lower.includes("₹")
+  );
+}
+
+function isOrderIntent(lower: string): boolean {
+  return (
+    lower.includes("order") ||
+    lower.includes("kharidna") ||
+    lower.includes("lena hai") ||
+    lower.includes("chahiye") ||
+    lower.includes("buy") ||
+    lower.includes("purchase") ||
+    lower.includes("cart") ||
+    lower.includes("checkout")
+  );
+}
+
+// ─── Product Selection ────────────────────────────────────────────────────────
+
+function pickNextProduct(): Product {
+  const unrecommended = PRODUCTS.filter(
+    (p) => !ctx.recommendedProducts.includes(p.id),
+  );
+  const pool = unrecommended.length > 0 ? unrecommended : PRODUCTS;
+  return pool[0];
+}
+
+function formatProduct(p: Product): string {
+  return `${p.emoji} **${p.name}** (₹${p.price}) — ${p.benefit}`;
+}
+
+function recordProduct(p: Product): void {
+  if (!ctx.recommendedProducts.includes(p.id)) {
+    ctx.recommendedProducts.push(p.id);
+  }
+  ctx.lastProductMentioned = p.id;
+  if (ctx.recommendedProducts.length >= PRODUCTS.length) {
+    ctx.recommendedProducts = [];
+  }
+}
+
+// ─── Symptom → Product Mapping ────────────────────────────────────────────────
+
+function detectSymptomProducts(lower: string): Product[] {
+  const matched: Product[] = [];
+
+  const add = (id: string) => {
+    const p = PRODUCTS.find((x) => x.id === id);
+    if (p && !matched.find((m) => m.id === id)) matched.push(p);
+  };
+
+  // Fatigue / energy
+  if (
+    lower.includes("thaka") ||
+    lower.includes("thakaan") ||
+    hasWord(lower, "tired") ||
+    lower.includes("energy nahi") ||
+    lower.includes("kamzori") ||
+    lower.includes("weakness") ||
+    lower.includes("weak")
+  ) {
+    add("ashwagandha");
+    add("shilajit");
+  }
+
+  // Sleep
+  if (
+    lower.includes("neend") ||
+    lower.includes("nind") ||
+    lower.includes("sleep") ||
+    lower.includes("insomnia") ||
+    lower.includes("raat ko") ||
+    lower.includes("so nahi")
+  ) {
+    add("ashwagandha");
+    add("brahmi");
+  }
+
+  // Stress / anxiety
+  if (
+    lower.includes("stress") ||
+    lower.includes("tension") ||
+    lower.includes("anxiety") ||
+    lower.includes("chinta") ||
+    lower.includes("pareshan") ||
+    lower.includes("pressure")
+  ) {
+    add("ashwagandha");
+    add("brahmi");
+  }
+
+  // Immunity / sick
+  if (
+    lower.includes("immun") ||
+    lower.includes("bimaar") ||
+    lower.includes("bimaari") ||
+    lower.includes("sick") ||
+    lower.includes("cold") ||
+    lower.includes("khansi") ||
+    lower.includes("bukhar") ||
+    lower.includes("fever") ||
+    lower.includes("flu") ||
+    lower.includes("infection")
+  ) {
+    add("amla");
+    add("moringa");
+  }
+
+  // Gym / muscle / fitness / workout
+  if (
+    lower.includes("gym") ||
+    lower.includes("muscle") ||
+    lower.includes("workout") ||
+    lower.includes("bodybuilding") ||
+    lower.includes("protein") ||
+    lower.includes("weight gain") ||
+    lower.includes("mass") ||
+    lower.includes("athlete") ||
+    lower.includes("sport")
+  ) {
+    add("protein");
+    add("ashwagandha");
+  }
+
+  // Digestion
+  if (
+    lower.includes("pet") ||
+    lower.includes("digestion") ||
+    lower.includes("acidity") ||
+    lower.includes("bloat") ||
+    lower.includes("gas") ||
+    lower.includes("constip") ||
+    lower.includes("stomach") ||
+    lower.includes("kabz")
+  ) {
+    add("triphala");
+    add("curcumin");
+  }
+
+  // Hair / skin / beauty
+  if (
+    lower.includes("baal") ||
+    lower.includes("hair") ||
+    lower.includes("skin") ||
+    lower.includes("glow") ||
+    lower.includes("twacha") ||
+    lower.includes("chamak") ||
+    lower.includes("pimple") ||
+    lower.includes("acne") ||
+    lower.includes("daag")
+  ) {
+    add("hairskin");
+    add("amla");
+  }
+
+  // Brain / study / focus
+  if (
+    lower.includes("padhai") ||
+    lower.includes("padh") ||
+    lower.includes("study") ||
+    lower.includes("focus") ||
+    lower.includes("concentration") ||
+    lower.includes("brain") ||
+    lower.includes("memory") ||
+    lower.includes("yaad") ||
+    lower.includes("exam") ||
+    lower.includes("student")
+  ) {
+    add("brahmi");
+    add("multivitamin");
+  }
+
+  // Joint pain / inflammation
+  if (
+    lower.includes("dard") ||
+    lower.includes("pain") ||
+    lower.includes("joint") ||
+    lower.includes("ghutna") ||
+    lower.includes("inflammation") ||
+    lower.includes("sujan") ||
+    lower.includes("arthritis")
+  ) {
+    add("curcumin");
+    add("shilajit");
+  }
+
+  // Weight / fat loss
+  if (
+    lower.includes("weight") ||
+    lower.includes("motapa") ||
+    lower.includes("fat") ||
+    lower.includes("slim") ||
+    lower.includes("vajan") ||
+    lower.includes("lose weight") ||
+    lower.includes("weight loss")
+  ) {
+    add("moringa");
+    add("triphala");
+  }
+
+  // Vitamins / nutrients
+  if (
+    lower.includes("vitamin") ||
+    lower.includes("mineral") ||
+    lower.includes("nutrient") ||
+    lower.includes("supplement")
+  ) {
+    add("multivitamin");
+    add("amla");
+  }
+
+  // Office / work / sedentary
+  if (
+    lower.includes("office") ||
+    lower.includes("desk") ||
+    lower.includes("laptop") ||
+    lower.includes("computer") ||
+    lower.includes("sitting")
+  ) {
+    add("ashwagandha");
+    add("multivitamin");
+  }
+
+  return matched;
+}
+
+// ─── FAQ Detection ────────────────────────────────────────────────────────────
+
+type FAQKey =
+  | "delivery"
+  | "shipping"
+  | "return"
+  | "payment"
+  | "contact"
+  | "usage"
+  | "safe";
+
+const FAQ_RESPONSES: Record<FAQKey, string> = {
   delivery:
-    "Orders are typically delivered within 3-7 business days across India. You will receive tracking information once your order is shipped.",
+    "Abhi delivery sirf **Lovely Professional University** campus tak available hai. Orders 1–2 business days mein deliver ho jaate hain. 🚚\n\nBy the way, koi health goal hai jiske liye main product suggest kar sakta hoon?",
   shipping:
-    "We offer free shipping on orders above ₹500. For orders below ₹500, a flat shipping charge of ₹50 applies.",
+    "₹500 se upar ke orders pe **FREE delivery**! ₹500 se neeche pe sirf ₹15 shipping charge. 📦\n\nKoi product dekhna hai? Main recommend kar sakta hoon!",
   return:
-    "We offer a 7-day return policy from the date of delivery. Products must be unopened, in original packaging, and not consumed.",
+    "Delivery ke 7 din ke andar return kar sakte hain — unopened product. Contact karein: revalife171@gmail.com ya +91 8942932189. 📞\n\nWaise, koi health concern hai? Sahi product pehli baar mein milega toh return ki zaroorat nahi! 😊",
   payment:
-    "We accept UPI, Credit/Debit Cards, Net Banking, and Cash on Delivery (COD). All online payments are processed securely.",
+    "Hum sirf **UPI** aur **COD** accept karte hain.\n• UPI ID: s.saw.13@superyes (PhonePe QR bhi available)\n• COD — delivery pe cash payment\n\nDono options checkout page pe hain. Koi product try karna chahte ho? 💳",
+  contact:
+    "📧 revalife171@gmail.com\n📞 +91 8942932189 ya +91 8700829733\n📍 Lovely Professional University, Punjab\n⏰ Morning 6–8 AM, Evening 4–6 PM\n\nWhatsApp pe bhi contact kar sakte ho! Koi health sawaal ho toh yahan bhi pooch sakte ho. 😊",
+  usage:
+    "Har product ki usage instructions product page pe clearly likhi hain. Generally subah khaane ke baad paani ke saath lena best rahta hai. 👨‍⚕️\n\nKaunse product ke baare mein jaanna tha? Main detail se bata sakta hoon!",
+  safe: "Sabhi revAlife products **GMP-certified** facilities mein banate hain — purity aur quality ka full guarantee. Natural ingredients, tested aur safe. 🙏\n\nKoi specific product ke baare mein safety question hai?",
 };
 
-function detectFAQ(message: string): string | null {
-  const lowerMessage = message.toLowerCase();
+function detectFAQ(lower: string): string | null {
+  if (
+    hasWord(lower, "delivery") ||
+    lower.includes("kab milega") ||
+    lower.includes("kitne din") ||
+    lower.includes("shipping time")
+  )
+    return FAQ_RESPONSES.delivery;
 
-  if (lowerMessage.includes("safe") || lowerMessage.includes("safety"))
-    return faqResponses.safe;
-  if (lowerMessage.includes("natural") || lowerMessage.includes("organic"))
-    return faqResponses.natural;
-  if (lowerMessage.includes("ingredient")) return faqResponses.ingredients;
+  if (hasWord(lower, "shipping") || lower.includes("shipping charge"))
+    return FAQ_RESPONSES.shipping;
+
   if (
-    lowerMessage.includes("how to use") ||
-    lowerMessage.includes("usage") ||
-    lowerMessage.includes("take")
+    hasWord(lower, "return") ||
+    hasWord(lower, "refund") ||
+    lower.includes("wapas")
   )
-    return faqResponses.usage;
+    return FAQ_RESPONSES.return;
+
   if (
-    lowerMessage.includes("delivery") ||
-    lowerMessage.includes("shipping time")
+    hasWord(lower, "payment") ||
+    hasWord(lower, "upi") ||
+    hasWord(lower, "cod") ||
+    lower.includes("bhugtan") ||
+    (hasWord(lower, "pay") && !lower.includes("payday"))
   )
-    return faqResponses.delivery;
-  if (lowerMessage.includes("shipping") || lowerMessage.includes("charges"))
-    return faqResponses.shipping;
-  if (lowerMessage.includes("return") || lowerMessage.includes("refund"))
-    return faqResponses.return;
-  if (lowerMessage.includes("payment") || lowerMessage.includes("pay"))
-    return faqResponses.payment;
+    return FAQ_RESPONSES.payment;
+
+  if (
+    hasWord(lower, "contact") ||
+    hasWord(lower, "support") ||
+    lower.includes("phone number") ||
+    lower.includes("whatsapp") ||
+    lower.includes("email")
+  )
+    return FAQ_RESPONSES.contact;
+
+  if (
+    lower.includes("how to use") ||
+    lower.includes("kaise lein") ||
+    lower.includes("kaise use") ||
+    hasWord(lower, "dosage") ||
+    hasWord(lower, "dose")
+  )
+    return FAQ_RESPONSES.usage;
+
+  if (
+    hasWord(lower, "safe") ||
+    lower.includes("side effect") ||
+    lower.includes("harmful") ||
+    lower.includes("nuksaan")
+  )
+    return FAQ_RESPONSES.safe;
 
   return null;
 }
 
-function getCategoryRecommendations(
-  state: ConversationState,
-): ProductCategory[] {
-  const categories: ProductCategory[] = [];
+// ─── Specific Product Query Detection ────────────────────────────────────────
 
-  // Age-based recommendations
-  if (state.ageGroup === "18-30") {
-    categories.push(ProductCategory.multivitamins, ProductCategory.fitness);
-  } else if (state.ageGroup === "30-50") {
-    categories.push(ProductCategory.immunity, ProductCategory.ayurvedicCare);
-  } else if (state.ageGroup === "50+") {
-    categories.push(
-      ProductCategory.ayurvedicCare,
-      ProductCategory.digestiveHealth,
-    );
+function detectProductQuery(lower: string): Product | null {
+  for (const p of PRODUCTS) {
+    const nameLower = p.name.toLowerCase();
+    // Match major words of product name
+    const words = nameLower.split(" ").filter((w) => w.length > 4);
+    if (words.some((w) => lower.includes(w))) return p;
   }
-
-  // Lifestyle-based recommendations
-  if (state.lifestyle === "active") {
-    if (!categories.includes(ProductCategory.fitness))
-      categories.push(ProductCategory.fitness);
-  } else if (state.lifestyle === "moderate") {
-    if (!categories.includes(ProductCategory.multivitamins))
-      categories.push(ProductCategory.multivitamins);
-  } else if (state.lifestyle === "sedentary") {
-    if (!categories.includes(ProductCategory.digestiveHealth))
-      categories.push(ProductCategory.digestiveHealth);
-  }
-
-  // Goal-based recommendations
-  if (state.goals) {
-    // biome-ignore lint/complexity/noForEach: simple array iteration
-    state.goals.forEach((goal) => {
-      const lowerGoal = goal.toLowerCase();
-      if (
-        lowerGoal.includes("immunity") &&
-        !categories.includes(ProductCategory.immunity)
-      ) {
-        categories.push(ProductCategory.immunity);
-      }
-      if (
-        lowerGoal.includes("energy") &&
-        !categories.includes(ProductCategory.multivitamins)
-      ) {
-        categories.push(ProductCategory.multivitamins);
-      }
-      if (
-        lowerGoal.includes("digestion") &&
-        !categories.includes(ProductCategory.digestiveHealth)
-      ) {
-        categories.push(ProductCategory.digestiveHealth);
-      }
-      if (
-        lowerGoal.includes("fitness") &&
-        !categories.includes(ProductCategory.fitness)
-      ) {
-        categories.push(ProductCategory.fitness);
-      }
-      if (
-        (lowerGoal.includes("stress") || lowerGoal.includes("calm")) &&
-        !categories.includes(ProductCategory.ayurvedicCare)
-      ) {
-        categories.push(ProductCategory.ayurvedicCare);
-      }
-    });
-  }
-
-  return categories.slice(0, 3);
+  return null;
 }
 
-function generateRecommendationMessage(state: ConversationState): string {
-  const categories = getCategoryRecommendations(state);
+// ─── Response Builders ────────────────────────────────────────────────────────
 
-  const categoryNames: Record<ProductCategory, string> = {
-    [ProductCategory.multivitamins]: "Multivitamins",
-    [ProductCategory.herbalSupplements]: "Herbal Supplements",
-    [ProductCategory.fitness]: "Protein & Fitness",
-    [ProductCategory.immunity]: "Immunity Boosters",
-    [ProductCategory.ayurvedicCare]: "Ayurvedic Care",
-    [ProductCategory.digestiveHealth]: "Digestive Health",
-  };
-
-  let message =
-    "Based on your profile, I recommend exploring these categories:\n\n";
-
-  categories.forEach((cat, index) => {
-    message += `${index + 1}. ${categoryNames[cat]}\n`;
-  });
-
-  message += "\nThese products are selected to support your wellness goals. ";
-
-  if (state.ageGroup === "18-30") {
-    message +=
-      "For your age group, focus on building a strong foundation with essential nutrients and supporting an active lifestyle.";
-  } else if (state.ageGroup === "30-50") {
-    message +=
-      "For your age group, maintaining immunity and overall wellness becomes increasingly important.";
-  } else if (state.ageGroup === "50+") {
-    message +=
-      "For your age group, supporting digestive health and traditional wellness practices can be beneficial.";
-  }
-
-  message +=
-    "\n\nYou can browse our products page to see specific recommendations in these categories. Would you like to know more about any specific product category?";
-
-  return message;
+function greetingResponse(): string {
+  const featured = pickNextProduct();
+  recordProduct(featured);
+  const responses = [
+    `Hii bhai! 😊 Main RevAlife Health Assistant hoon. Koi health problem hai toh bata — main best product suggest karoonga!\n\nAj ka featured: ${formatProduct(featured)}\n\nKya yeh try karna chahoge? Ya koi specific health goal hai?`,
+    `Namaste! 🙏 Swaagat hai revAlife mein! Main tumhara health buddy hoon — bina doctor ke fees ke!\n\nAbbhi try kar rahe hain: ${formatProduct(featured)}\n\nKoi health concern hai? Batao, main sahi product dhundhunga!`,
+    `Hey! 👋 Aagaye revAlife pe — accha kiya! Main hoon yahan aapki wellness journey mein help karne ke liye.\n\nBestseller abhi: ${formatProduct(featured)}\n\nKaunsi health problem hai? Main expert advice dunga!`,
+  ];
+  return responses[ctx.messageCount % responses.length];
 }
 
-export async function processMessage(
-  userMessage: string,
-  _history: ChatMessage[],
-): Promise<ChatMessage> {
-  const lowerMessage = userMessage.toLowerCase();
+function acknowledgementResponse(): string {
+  const next = pickNextProduct();
+  recordProduct(next);
+  const responses = [
+    `😊 Khushi hui help kar ke! Waise bhai, ek aur great product hai — ${formatProduct(next)}. Dekhna chahoge?`,
+    `Great! Koi aur sawaal ho toh pooch lena. By the way, ${formatProduct(next)} — yeh bhi kaam ka product hai tumhare liye! 💪`,
+    `Bilkul! Main yahan hoon. Waise, koi health issue hai jo solve karna chahte ho? ${formatProduct(next)} kaafi popular hai! 🌿`,
+  ];
+  return responses[ctx.messageCount % responses.length];
+}
 
-  // Check for FAQ
-  const faqResponse = detectFAQ(userMessage);
-  if (faqResponse) {
-    return { role: "bot", content: faqResponse };
+function symptomResponse(products: Product[]): string {
+  const main = products[0];
+  const secondary = products[1];
+  recordProduct(main);
+
+  let msg = `Samajh gaya! Is problem ke liye ${formatProduct(main)} best rahega — ${main.benefit}. `;
+
+  if (secondary) {
+    recordProduct(secondary);
+    msg += `Aur double benefit ke liye ${secondary.emoji} **${secondary.name}** (₹${secondary.price}) bhi try kar sakte ho. `;
   }
 
-  // Handle recommendation flow
-  if (conversationState.stage === "initial") {
-    if (
-      lowerMessage.includes("recommend") ||
-      lowerMessage.includes("suggest") ||
-      lowerMessage.includes("help")
-    ) {
-      conversationState.stage = "collecting_age";
-      return {
-        role: "bot",
-        content:
-          "I'd be happy to recommend products for you! Let me ask a few questions to personalize my suggestions.\n\nWhat is your age group?\n1. 18-30 years\n2. 30-50 years\n3. 50+ years",
-      };
-    }
+  msg += "\n\nLPU delivery free hai ₹500+ pe! Abhi order karna chahoge? 🛒";
+  return msg;
+}
 
-    return {
-      role: "bot",
-      content:
-        'I can help you find the right wellness products! You can ask me about:\n\n• Product safety and ingredients\n• Shipping and delivery\n• Returns and refunds\n• Payment methods\n\nOr say "recommend products" and I\'ll suggest products based on your needs.',
-    };
+function priceResponse(): string {
+  const lastProd = PRODUCTS.find((p) => p.id === ctx.lastProductMentioned);
+  if (lastProd) {
+    return `${lastProd.emoji} **${lastProd.name}** ki price hai **₹${lastProd.price}** — aur ₹500+ order pe LPU mein FREE delivery! 🎉\n\nAbhi order karte ho? Products page pe jaao ya cart mein add karo!`;
   }
 
-  if (conversationState.stage === "collecting_age") {
-    if (
-      lowerMessage.includes("18") ||
-      lowerMessage.includes("20") ||
-      lowerMessage.includes("1")
-    ) {
-      conversationState.ageGroup = "18-30";
-    } else if (
-      lowerMessage.includes("30") ||
-      lowerMessage.includes("40") ||
-      lowerMessage.includes("2")
-    ) {
-      conversationState.ageGroup = "30-50";
-    } else if (
-      lowerMessage.includes("50") ||
-      lowerMessage.includes("60") ||
-      lowerMessage.includes("3")
-    ) {
-      conversationState.ageGroup = "50+";
-    } else {
-      return {
-        role: "bot",
-        content:
-          "Please select one of the age groups:\n1. 18-30 years\n2. 30-50 years\n3. 50+ years",
-      };
-    }
+  const affordable = PRODUCTS.slice()
+    .sort((a, b) => a.price - b.price)
+    .slice(0, 3);
+  const list = affordable
+    .map((p) => `${p.emoji} **${p.name}** — ₹${p.price}`)
+    .join("\n");
+  return `Hamare products ₹399 se shuru hote hain! Top affordable picks:\n\n${list}\n\nKaunsa lena chahoge? 😊`;
+}
 
-    conversationState.stage = "collecting_lifestyle";
-    return {
-      role: "bot",
-      content:
-        "Great! How would you describe your lifestyle?\n1. Active (regular exercise, sports)\n2. Moderate (some physical activity)\n3. Sedentary (mostly desk work)",
-    };
+function orderIntentResponse(): string {
+  const lastProd = PRODUCTS.find((p) => p.id === ctx.lastProductMentioned);
+  if (lastProd) {
+    return `${lastProd.emoji} Bahut accha! **${lastProd.name}** lene ke liye:\n\n1. Products page pe jaao\n2. Cart mein add karo\n3. Checkout pe UPI ya COD choose karo\n\nLPU delivery 1–2 din mein! 🚀 Koi aur help chahiye?`;
   }
+  return "Bilkul! Order karne ke liye Products page pe jaao, apna product choose karo, aur checkout mein UPI ya COD select karo. LPU delivery 1\u20132 din mein hogi! \uD83D\uDE9A\n\nKaunsa product lena tha? Main guide kar sakta hoon!";
+}
 
-  if (conversationState.stage === "collecting_lifestyle") {
-    if (
-      lowerMessage.includes("active") ||
-      lowerMessage.includes("exercise") ||
-      lowerMessage.includes("1")
-    ) {
-      conversationState.lifestyle = "active";
-    } else if (
-      lowerMessage.includes("moderate") ||
-      lowerMessage.includes("some") ||
-      lowerMessage.includes("2")
-    ) {
-      conversationState.lifestyle = "moderate";
-    } else if (
-      lowerMessage.includes("sedentary") ||
-      lowerMessage.includes("desk") ||
-      lowerMessage.includes("3")
-    ) {
-      conversationState.lifestyle = "sedentary";
-    } else {
-      return {
-        role: "bot",
-        content:
-          "Please select one of the lifestyle options:\n1. Active\n2. Moderate\n3. Sedentary",
-      };
-    }
-
-    conversationState.stage = "collecting_goals";
-    return {
-      role: "bot",
-      content:
-        "Perfect! What are your main wellness goals? (You can mention multiple)\n\n• Boost immunity\n• Increase energy\n• Improve digestion\n• Support fitness\n• Reduce stress",
-    };
-  }
-
-  if (conversationState.stage === "collecting_goals") {
-    conversationState.goals = [userMessage];
-    conversationState.stage = "complete";
-
-    const recommendation = generateRecommendationMessage(conversationState);
-
-    // Reset for next conversation
-    conversationState = { stage: "initial" };
-
-    return { role: "bot", content: recommendation };
-  }
-
-  // Default response
-  return {
-    role: "bot",
-    content:
-      'I\'m here to help! You can ask me about product safety, shipping, returns, or say "recommend products" for personalized suggestions.',
+function productQueryResponse(product: Product): string {
+  recordProduct(product);
+  const details: Record<string, string> = {
+    ashwagandha:
+      "Ashwagandha KSM-66 sabse potent form hai — cortisol reduce karta hai, energy boost karta hai, sleep better karta hai. Subah khaane ke saath lena best hai.",
+    shilajit:
+      "Pure Himalayan Shilajit 85+ minerals ke saath — stamina, testosterone, aur deep energy ke liye. Matar ke daane jitna warm water mein dissolve karo.",
+    brahmi:
+      "Brahmi ancient Ayurvedic herb hai brain ke liye — memory sharp karta hai, anxiety kam karta hai, exams mein focus badhata hai.",
+    moringa:
+      "Moringa 'Miracle Tree' kehte hain — 75+ nutrients, Vitamin C + protein + iron sab ek mein. Daily superfood hai.",
+    amla: "Amla natural Vitamin C ka best source — synthetic se 20x zyada bioavailable. Immunity, skin glow, aur hair ke liye perfect.",
+    triphala:
+      "Triphala 3 fruits ka combination — Amalaki, Bibhitaki, Haritaki. Gut cleanse, digestion, aur toxins remove karta hai.",
+    curcumin:
+      "Curcumin 95% + BioPerine (black pepper extract) — absorption 2000% badhta hai. Inflammation, joint pain, aur immunity ke liye best.",
+    protein:
+      "Plant-based protein — pea + rice protein blend. 24g protein per serving, no whey, vegan friendly. Muscle build aur recovery ke liye.",
+    multivitamin:
+      "Complete daily vitamin pack — A, B-complex, C, D3, Zinc, Magnesium sab included. Men aur women dono ke liye.",
+    hairskin:
+      "Biotin + Collagen + Vitamin E + Amla — hair fall rokta hai 4-6 hafte mein, skin glow karne lagti hai. Inside-out beauty!",
   };
+  const detail = details[product.id] ?? product.benefit;
+  return `${product.emoji} **${product.name}** ke baare mein:\n\n${detail}\n\n💰 Price: **₹${product.price}** | LPU delivery FREE (₹500+)\n\nAbhi try karna chahoge? Koi aur question? 😊`;
+}
+
+function genericSalesResponse(): string {
+  const next = pickNextProduct();
+  recordProduct(next);
+  const probes = [
+    `Bhai batao — thakan, neend, stress, ya koi aur issue hai? Main exact product suggest karoonga! Waise ${formatProduct(next)} — bahut popular hai! 🌿`,
+    `Koi health goal batao — gym, padhai, immunity, digestion — main perfect product dhundhunga! Abhi trending: ${formatProduct(next)} ✨`,
+    `Aapki health ki baat karein! Kaunsi problem hai? Main ek product suggest karta hoon jo actually kaam karta hai. Check karo: ${formatProduct(next)} 💪`,
+  ];
+  return probes[ctx.messageCount % probes.length];
+}
+
+function proactiveEngagement(): string {
+  const prompts = [
+    "Waise bhai, ek quick sawaal — roz subah uthke thaka hua feel hota hai? Agar haan, main ek game-changing product suggest kar sakta hoon! 🌅",
+    "Bhai, gym jaate ho ya padhai karte ho? Dono ke liye alag products hain revAlife mein — batao, main perfect combo suggest karoonga! 💪📚",
+    "Ek sawaal — immunity strong rakhna chahte ho? Especially season change mein bimaar padna avoid karna chahte ho? 🛡️",
+  ];
+  return prompts[Math.floor(ctx.messageCount / 3) % prompts.length];
+}
+
+// ─── Main processMessage ──────────────────────────────────────────────────────
+
+export function processMessage(userMessage: string): ChatMessage {
+  const trimmed = userMessage.trim();
+  if (!trimmed) {
+    return {
+      role: "bot",
+      content: genericSalesResponse(),
+    };
+  }
+
+  const lower = trimmed.toLowerCase();
+  ctx.messageCount += 1;
+
+  // 1. Greeting
+  if (isGreeting(lower)) {
+    return { role: "bot", content: greetingResponse() };
+  }
+
+  // 2. Price query
+  if (isPriceQuery(lower)) {
+    return { role: "bot", content: priceResponse() };
+  }
+
+  // 3. Order intent
+  if (isOrderIntent(lower)) {
+    return { role: "bot", content: orderIntentResponse() };
+  }
+
+  // 4. Specific product query
+  const queriedProduct = detectProductQuery(lower);
+  if (queriedProduct) {
+    return { role: "bot", content: productQueryResponse(queriedProduct) };
+  }
+
+  // 5. FAQ detection
+  const faqResp = detectFAQ(lower);
+  if (faqResp) {
+    return { role: "bot", content: faqResp };
+  }
+
+  // 6. Symptom / goal detection
+  const symptomProducts = detectSymptomProducts(lower);
+  if (symptomProducts.length > 0) {
+    // Track mentioned goals
+    ctx.mentionedGoals.push(lower.substring(0, 50));
+    return { role: "bot", content: symptomResponse(symptomProducts) };
+  }
+
+  // 7. Acknowledgement
+  if (isAcknowledgement(lower)) {
+    return { role: "bot", content: acknowledgementResponse() };
+  }
+
+  // 8. Proactive engagement every 3rd message
+  if (ctx.messageCount % 3 === 0) {
+    return { role: "bot", content: proactiveEngagement() };
+  }
+
+  // 9. Generic sales fallback
+  return { role: "bot", content: genericSalesResponse() };
+}
+
+// ─── Reset (for testing / widget re-open) ────────────────────────────────────
+
+export function resetConversation(): void {
+  ctx = createContext();
 }

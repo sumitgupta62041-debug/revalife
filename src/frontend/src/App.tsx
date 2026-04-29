@@ -6,24 +6,64 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
+import { Suspense, createContext, lazy, useContext, useState } from "react";
 import Layout from "./components/Layout";
+import { LoginModal } from "./components/LoginModal";
 import About from "./pages/About";
-import Admin from "./pages/Admin";
-import Cart from "./pages/Cart";
-import Checkout from "./pages/Checkout";
 import Contact from "./pages/Contact";
 import FAQ from "./pages/FAQ";
 import Home from "./pages/Home";
-import MyAccount from "./pages/MyAccount";
 import OrderConfirmation from "./pages/OrderConfirmation";
 import OrderTracking from "./pages/OrderTracking";
 import Privacy from "./pages/Privacy";
-import ProductDetail from "./pages/ProductDetail";
 import Products from "./pages/Products";
 import Returns from "./pages/Returns";
 import Science from "./pages/Science";
 import Shipping from "./pages/Shipping";
 import Terms from "./pages/Terms";
+
+// Heavy pages — lazy loaded for better initial bundle size
+const Admin = lazy(() => import("./pages/Admin"));
+const Cart = lazy(() => import("./pages/Cart"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+const MyAccount = lazy(() => import("./pages/MyAccount"));
+const ProductDetail = lazy(() => import("./pages/ProductDetail"));
+
+// ─── Login Context ─────────────────────────────────────────────────────────────
+
+interface LoginContextValue {
+  openLoginModal: () => void;
+}
+
+export const LoginContext = createContext<LoginContextValue>({
+  openLoginModal: () => {},
+});
+
+export function useLoginModal() {
+  return useContext(LoginContext);
+}
+
+// ─── Page Loader ───────────────────────────────────────────────────────────────
+
+function PageLoader() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="h-8 w-8 rounded-full border-4 border-wellness-green border-t-transparent animate-spin" />
+    </div>
+  );
+}
+
+function withSuspense(Component: React.ComponentType) {
+  return function SuspenseWrapped() {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <Component />
+      </Suspense>
+    );
+  };
+}
+
+// ─── Routes ───────────────────────────────────────────────────────────────────
 
 const rootRoute = createRootRoute({
   component: Layout,
@@ -44,19 +84,19 @@ const productsRoute = createRoute({
 const productDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/products/$id",
-  component: ProductDetail,
+  component: withSuspense(ProductDetail),
 });
 
 const cartRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/cart",
-  component: Cart,
+  component: withSuspense(Cart),
 });
 
 const checkoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/checkout",
-  component: Checkout,
+  component: withSuspense(Checkout),
 });
 
 const orderConfirmationRoute = createRoute({
@@ -68,7 +108,7 @@ const orderConfirmationRoute = createRoute({
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/account",
-  component: MyAccount,
+  component: withSuspense(MyAccount),
 });
 
 const aboutRoute = createRoute({
@@ -128,7 +168,7 @@ const trackOrderRoute = createRoute({
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/admin",
-  component: Admin,
+  component: withSuspense(Admin),
 });
 
 const routeTree = rootRoute.addChildren([
@@ -159,11 +199,23 @@ declare module "@tanstack/react-router" {
   }
 }
 
+// ─── App ──────────────────────────────────────────────────────────────────────
+
 export default function App() {
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-      <RouterProvider router={router} />
-      <Toaster />
+      <LoginContext.Provider
+        value={{ openLoginModal: () => setLoginModalOpen(true) }}
+      >
+        <RouterProvider router={router} />
+        <LoginModal
+          open={loginModalOpen}
+          onClose={() => setLoginModalOpen(false)}
+        />
+        <Toaster />
+      </LoginContext.Provider>
     </ThemeProvider>
   );
 }
