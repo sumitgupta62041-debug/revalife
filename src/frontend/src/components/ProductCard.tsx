@@ -1,12 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import { ShoppingCart, Star } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLoginModal } from "../App";
+import type { PendingCartAction } from "../App";
 import { useCartDrawer } from "../contexts/CartDrawerContext";
 import { useCart } from "../hooks/useCart";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { ProductImageFallback } from "./ProductImageFallback";
 
 interface ProductCardProps {
   id: string;
@@ -36,46 +38,79 @@ export function ProductCard({
   categoryLabel,
   inStock = true,
 }: ProductCardProps) {
+  const { openLoginModalWithAction } = useLoginModal();
   const { identity } = useInternetIdentity();
-  const { openLoginModal } = useLoginModal();
   const { addToCart, isAddingToCart } = useCart();
   const { openDrawer } = useCartDrawer();
+  const [imgFailed, setImgFailed] = useState(false);
+  const [addedFeedback, setAddedFeedback] = useState(false);
+
+  const isAuthenticated = !!identity;
 
   const categoryColorClass =
     CATEGORY_COLORS[categoryLabel] ?? "bg-wellness-green";
+
+  // ── Execute the actual add-to-cart + drawer open ──────────────────────────
+  const executeAddToCart = useCallback(
+    async (productId: string, quantity: bigint) => {
+      try {
+        await addToCart(productId, quantity);
+        openDrawer({ id: productId, name, price, imageUrl });
+        setAddedFeedback(true);
+        setTimeout(() => setAddedFeedback(false), 1500);
+      } catch {
+        // useCart.onError already shows the toast
+      }
+    },
+    [addToCart, openDrawer, name, price, imageUrl],
+  );
+
+  // ── Listen for replay events dispatched by PostLoginReplayer ─────────────
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const action = (e as CustomEvent<PendingCartAction>).detail;
+      if (action.type === "addToCart" && action.productId === id) {
+        executeAddToCart(action.productId, action.quantity);
+      }
+    };
+    window.addEventListener("revalife:replayCartAction", handler);
+    return () =>
+      window.removeEventListener("revalife:replayCartAction", handler);
+  }, [id, executeAddToCart]);
 
   const handleAddToCart = useCallback(
     async (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
 
-      if (!identity) {
-        openLoginModal();
-        return;
-      }
-
       if (!inStock) {
         toast.error("Product is out of stock");
         return;
       }
 
-      try {
-        await addToCart(id, BigInt(1));
-        openDrawer({ id, name, price, imageUrl });
-      } catch {
-        toast.error("Could not add to cart. Please try again.");
+      // ── Pre-auth check: queue action BEFORE attempting mutation ──────────
+      if (!isAuthenticated) {
+        openLoginModalWithAction({
+          type: "addToCart",
+          productId: id,
+          quantity: BigInt(1),
+          drawerData: { id, name, price, imageUrl },
+        });
+        return;
       }
+
+      await executeAddToCart(id, BigInt(1));
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       id,
       name,
       price,
       imageUrl,
       inStock,
-      identity,
-      openLoginModal,
-      addToCart,
-      openDrawer,
+      isAuthenticated,
+      openLoginModalWithAction,
+      executeAddToCart,
     ],
   );
 
@@ -84,7 +119,7 @@ export function ProductCard({
       className="group bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated hover:-translate-y-1.5 transition-all duration-300 flex flex-col border border-border/40"
       data-ocid="product.card"
     >
-      {/* Clickable image + content area — links to product detail */}
+      {/* Clickable image + content area */}
       <Link
         to="/products/$id"
         params={{ id }}
@@ -93,16 +128,22 @@ export function ProductCard({
       >
         {/* Image container */}
         <div className="relative aspect-[4/5] overflow-hidden bg-muted">
-          <img
-            src={imageUrl}
-            alt={name}
-            loading="lazy"
-            className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500 ease-out"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src =
-                "/assets/images/placeholder.svg";
-            }}
-          />
+          {imgFailed ? (
+            <ProductImageFallback name={name} categoryLabel={categoryLabel} />
+          ) : (
+            <img
+              src={imageUrl}
+              alt={name}
+              loading="lazy"
+              decoding="async"
+              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
+              width={300}
+              height={375}
+              className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500 ease-out"
+              onError={() => setImgFailed(true)}
+            />
+          )}
           {/* Gradient overlay */}
           <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
 
@@ -167,7 +208,11 @@ export function ProductCard({
           data-ocid="product.add_to_cart_button"
         >
           <ShoppingCart className="h-3.5 w-3.5" />
-          {isAddingToCart ? "Adding..." : "Add to Cart"}
+          {isAddingToCart
+            ? "Adding..."
+            : addedFeedback
+              ? "Added! ✓"
+              : "Add to Cart"}
         </Button>
       </div>
     </div>

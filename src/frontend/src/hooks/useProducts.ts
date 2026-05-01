@@ -7,7 +7,7 @@ import { useActor } from "./useActor";
 // Categories must match ProductCategory enum values exactly.
 export const FALLBACK_PRODUCTS: Product[] = [
   {
-    id: "fallback-1",
+    id: "p-ashwagandha",
     name: "Ashwagandha KSM-66 Extract",
     shortDescription:
       "Premium stress relief & energy supplement with KSM-66 root extract",
@@ -15,7 +15,8 @@ export const FALLBACK_PRODUCTS: Product[] = [
       "Ashwagandha KSM-66 is the world's best-studied, most bioavailable full-spectrum root extract. Clinically proven to reduce stress, boost energy levels, improve immunity, and support hormonal balance. 500mg per capsule, 60 capsules per bottle.",
     price: BigInt(799),
     category: "herbalSupplements" as ProductCategory,
-    imageUrl: "/assets/products/product-1.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1611241893603-3c359704e0ee?w=500&q=80",
     benefits: [
       "Reduces stress & anxiety",
       "Boosts energy & stamina",
@@ -34,7 +35,7 @@ export const FALLBACK_PRODUCTS: Product[] = [
     featured: true,
   },
   {
-    id: "fallback-2",
+    id: "p-moringa",
     name: "Organic Moringa Leaf Powder",
     shortDescription:
       "Superfood nutrition boost — antioxidant-rich organic moringa",
@@ -42,7 +43,8 @@ export const FALLBACK_PRODUCTS: Product[] = [
       "Sourced from organic moringa farms in India, this superfood powder is packed with vitamins A, C, E, calcium, potassium, and protein. Add to smoothies, juices, or meals for a powerful daily nutrition boost.",
     price: BigInt(449),
     category: "herbalSupplements" as ProductCategory,
-    imageUrl: "/assets/products/product-2.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=500&q=80",
     benefits: [
       "Rich in vitamins & minerals",
       "Powerful antioxidant",
@@ -58,14 +60,15 @@ export const FALLBACK_PRODUCTS: Product[] = [
     featured: true,
   },
   {
-    id: "fallback-3",
+    id: "p-triphala",
     name: "Triphala Churna (Organic)",
     shortDescription: "Ancient Ayurvedic blend for digestive health & detox",
     fullDescription:
       "Triphala is a cornerstone of Ayurvedic medicine — a synergistic blend of three fruits (Amalaki, Bibhitaki, Haritaki) that gently cleanses the digestive tract, supports regularity, and promotes natural detoxification.",
     price: BigInt(299),
     category: "digestiveHealth" as ProductCategory,
-    imageUrl: "/assets/products/product-3.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&q=80",
     benefits: [
       "Improves digestion",
       "Natural detox support",
@@ -85,7 +88,7 @@ export const FALLBACK_PRODUCTS: Product[] = [
     featured: false,
   },
   {
-    id: "fallback-4",
+    id: "p-curcumin",
     name: "Curcumin with Piperine",
     shortDescription:
       "High-absorption turmeric extract for inflammation & joint health",
@@ -93,7 +96,8 @@ export const FALLBACK_PRODUCTS: Product[] = [
       "Our Curcumin supplement combines 95% standardized curcuminoids with BioPerine (black pepper extract) for maximum absorption. Scientifically proven to reduce inflammation, support joint health, and provide powerful antioxidant protection.",
     price: BigInt(649),
     category: "immunity" as ProductCategory,
-    imageUrl: "/assets/products/product-4.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1615485500704-8e990f9900f7?w=500&q=80",
     benefits: [
       "Reduces inflammation",
       "Supports joint health",
@@ -112,14 +116,15 @@ export const FALLBACK_PRODUCTS: Product[] = [
     featured: true,
   },
   {
-    id: "fallback-5",
+    id: "p-protein",
     name: "Plant-Based Protein Blend",
     shortDescription: "Complete vegan protein for muscle building & recovery",
     fullDescription:
       "Our premium plant-based protein combines pea, brown rice, and hemp proteins for a complete amino acid profile. 25g protein per serving, great chocolate flavour, no added sugar, easy to digest.",
     price: BigInt(1299),
     category: "fitness" as ProductCategory,
-    imageUrl: "/assets/products/product-5.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500&q=80",
     benefits: [
       "25g protein per serving",
       "Complete amino acid profile",
@@ -141,7 +146,7 @@ export const FALLBACK_PRODUCTS: Product[] = [
     featured: true,
   },
   {
-    id: "fallback-6",
+    id: "p-multivitamin",
     name: "Daily Multivitamin Complex",
     shortDescription:
       "Complete daily nutrition with 25 essential vitamins & minerals",
@@ -149,7 +154,8 @@ export const FALLBACK_PRODUCTS: Product[] = [
       "Specially formulated for Indian adults, our Daily Multivitamin provides 25 essential nutrients including Vitamin D3, B12, Iron, Zinc, and Folate — nutrients commonly deficient in Indian diets. One tablet daily for complete nutritional support.",
     price: BigInt(549),
     category: "multivitamins" as ProductCategory,
-    imageUrl: "/assets/products/product-6.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&q=80",
     benefits: [
       "25 vitamins & minerals",
       "Boosts energy levels",
@@ -168,7 +174,7 @@ export const FALLBACK_PRODUCTS: Product[] = [
     featured: true,
   },
   {
-    id: "fallback-7",
+    id: "p-shilajit",
     name: "Pure Shilajit Resin",
     shortDescription:
       "Himalayan shilajit resin for energy, vitality & testosterone support",
@@ -176,7 +182,8 @@ export const FALLBACK_PRODUCTS: Product[] = [
       "Authentic Himalayan Shilajit resin, purified and standardized to 60% fulvic acid. This ancient Ayurvedic rasayana supports energy, stamina, testosterone levels, and cognitive function. Used in Ayurveda for thousands of years.",
     price: BigInt(999),
     category: "ayurvedicCare" as ProductCategory,
-    imageUrl: "/assets/products/product-7.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=500&q=80",
     benefits: [
       "Boosts energy & vitality",
       "Supports testosterone",
@@ -192,7 +199,7 @@ export const FALLBACK_PRODUCTS: Product[] = [
     featured: true,
   },
   {
-    id: "fallback-8",
+    id: "p-hairskin",
     name: "Hair & Skin Biotin Plus",
     shortDescription:
       "Biotin with Zinc & Vitamins for hair growth and glowing skin",
@@ -200,7 +207,8 @@ export const FALLBACK_PRODUCTS: Product[] = [
       "Our Hair & Skin Biotin Plus combines high-potency Biotin (10,000mcg) with Zinc, Vitamin C, and Hyaluronic Acid for comprehensive beauty nutrition. Promotes hair growth, reduces hair fall, improves skin elasticity, and strengthens nails.",
     price: BigInt(699),
     category: "multivitamins" as ProductCategory,
-    imageUrl: "/assets/products/product-8.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=500&q=80",
     benefits: [
       "Reduces hair fall",
       "Promotes hair growth",
@@ -222,7 +230,7 @@ export const FALLBACK_PRODUCTS: Product[] = [
     featured: false,
   },
   {
-    id: "fallback-9",
+    id: "p-amla",
     name: "Amla (Indian Gooseberry) Extract",
     shortDescription:
       "India's richest Vitamin C source for immunity & hair health",
@@ -230,7 +238,8 @@ export const FALLBACK_PRODUCTS: Product[] = [
       "Amla is India's most potent natural superfood — one amla berry contains 20x more Vitamin C than an orange. Our standardized extract provides powerful antioxidant protection, boosts immunity, supports hair health, and aids digestion.",
     price: BigInt(399),
     category: "immunity" as ProductCategory,
-    imageUrl: "/assets/products/product-9.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1490474418585-ba9bad8fd0ea?w=500&q=80",
     benefits: [
       "Highest natural Vitamin C",
       "Boosts immunity",
@@ -247,14 +256,15 @@ export const FALLBACK_PRODUCTS: Product[] = [
     featured: false,
   },
   {
-    id: "fallback-10",
+    id: "p-brahmi",
     name: "Brahmi Brain Booster",
     shortDescription: "Ayurvedic brain tonic for memory, focus & stress relief",
     fullDescription:
       "Brahmi (Bacopa monnieri) has been used in Ayurveda for centuries as a brain tonic. Clinically proven to improve memory retention, enhance focus, reduce anxiety, and support overall cognitive function. Ideal for students and professionals.",
     price: BigInt(549),
     category: "herbalSupplements" as ProductCategory,
-    imageUrl: "/assets/products/product-10.jpg",
+    imageUrl:
+      "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=500&q=80",
     benefits: [
       "Improves memory & recall",
       "Enhances focus & concentration",
@@ -295,6 +305,8 @@ export function useGetProduct(id: string) {
       throw new Error("Product not found");
     },
     enabled: !!id,
+    staleTime: 5_000,
+    gcTime: 120_000,
   });
 }
 
@@ -321,7 +333,8 @@ export function useListProducts(category: ProductCategory | null) {
     },
     // Always enabled — don't gate on actor so fallback data shows immediately
     enabled: !isActorFetching || !actor,
-    staleTime: 30_000,
+    staleTime: 5_000,
+    gcTime: 120_000,
     retry: 1,
   });
 }
@@ -347,7 +360,8 @@ export function useFeaturedProducts() {
         : FALLBACK_PRODUCTS.slice(0, 6);
     },
     enabled: !isActorFetching || !actor,
-    staleTime: 30_000,
+    staleTime: 5_000,
+    gcTime: 120_000,
     retry: 1,
   });
 }

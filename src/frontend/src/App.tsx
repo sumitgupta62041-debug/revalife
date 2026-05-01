@@ -6,9 +6,20 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
-import { Suspense, createContext, lazy, useContext, useState } from "react";
+import {
+  Suspense,
+  createContext,
+  lazy,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import Layout from "./components/Layout";
 import { LoginModal } from "./components/LoginModal";
+import { useActor } from "./hooks/useActor";
+import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import FAQ from "./pages/FAQ";
@@ -29,14 +40,30 @@ const Checkout = lazy(() => import("./pages/Checkout"));
 const MyAccount = lazy(() => import("./pages/MyAccount"));
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 
+// ─── Pending Action Types ─────────────────────────────────────────────────────
+
+export type PendingCartAction = {
+  type: "addToCart";
+  productId: string;
+  quantity: bigint;
+  /** Optional drawer data to show after item is added */
+  drawerData?: { id: string; name: string; price: number; imageUrl: string };
+};
+
 // ─── Login Context ─────────────────────────────────────────────────────────────
 
 interface LoginContextValue {
   openLoginModal: () => void;
+  /** Opens login modal and queues a cart action to auto-execute after login */
+  openLoginModalWithAction: (action: PendingCartAction) => void;
+  /** Consume the pending action once (returns it and clears the queue) */
+  consumePendingAction: () => PendingCartAction | null;
 }
 
 export const LoginContext = createContext<LoginContextValue>({
   openLoginModal: () => {},
+  openLoginModalWithAction: () => {},
+  consumePendingAction: () => null,
 });
 
 export function useLoginModal() {
@@ -199,17 +226,87 @@ declare module "@tanstack/react-router" {
   }
 }
 
+// ─── Post-Login Action Replayer ───────────────────────────────────────────────
+// Watches for the transition: unauthenticated → authenticated + actor ready,
+// then dispatches the queued cart action so any mounted component can replay it.
+// Two-phase design handles the race where identity arrives before actor is ready:
+//   Phase 1 — on login: detect auth transition, capture pending action into localRef
+//   Phase 2 — on actor ready: if localRef has an action, dispatch and clear
+
+function PostLoginReplayer({
+  consumePendingAction,
+}: {
+  consumePendingAction: () => PendingCartAction | null;
+}) {
+  const { identity } = useInternetIdentity();
+  const { actor, isFetching: actorFetching } = useActor();
+  const wasAuthenticatedRef = useRef(false);
+  // Holds an action that was captured at login time but not yet dispatched
+  // (actor may still be initializing)
+  const capturedActionRef = useRef<PendingCartAction | null>(null);
+
+  // Phase 1: detect login transition and capture the pending action
+  useEffect(() => {
+    const isAuthenticated = !!identity;
+    const justLoggedIn = !wasAuthenticatedRef.current && isAuthenticated;
+    wasAuthenticatedRef.current = isAuthenticated;
+
+    if (!justLoggedIn) return;
+
+    // Capture now so the queue is cleared; dispatch happens in Phase 2
+    const pending = consumePendingAction();
+    if (pending) {
+      capturedActionRef.current = pending;
+    }
+  }, [identity, consumePendingAction]);
+
+  // Phase 2: once actor is ready after login, dispatch the captured action
+  useEffect(() => {
+    if (!identity || !actor || actorFetching) return;
+    const pending = capturedActionRef.current;
+    if (!pending) return;
+
+    capturedActionRef.current = null;
+    window.dispatchEvent(
+      new CustomEvent("revalife:replayCartAction", { detail: pending }),
+    );
+  }, [identity, actor, actorFetching]);
+
+  return null;
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const pendingActionRef = useRef<PendingCartAction | null>(null);
+
+  const openLoginModal = useCallback(() => {
+    setLoginModalOpen(true);
+  }, []);
+
+  const openLoginModalWithAction = useCallback((action: PendingCartAction) => {
+    pendingActionRef.current = action;
+    setLoginModalOpen(true);
+  }, []);
+
+  const consumePendingAction = useCallback((): PendingCartAction | null => {
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    return action;
+  }, []);
 
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <LoginContext.Provider
-        value={{ openLoginModal: () => setLoginModalOpen(true) }}
+        value={{
+          openLoginModal,
+          openLoginModalWithAction,
+          consumePendingAction,
+        }}
       >
         <RouterProvider router={router} />
+        <PostLoginReplayer consumePendingAction={consumePendingAction} />
         <LoginModal
           open={loginModalOpen}
           onClose={() => setLoginModalOpen(false)}

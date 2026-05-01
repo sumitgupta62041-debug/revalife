@@ -10,8 +10,10 @@ import {
   X,
 } from "lucide-react";
 import { useEffect } from "react";
+import { useLoginModal } from "../App";
 import { useCartDrawer } from "../contexts/CartDrawerContext";
 import { useCart } from "../hooks/useCart";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
 const SHIPPING_COST = 15;
 const FREE_SHIPPING_THRESHOLD = 500;
@@ -20,6 +22,8 @@ export default function CartDrawer() {
   const { isOpen, lastAddedProduct, closeDrawer } = useCartDrawer();
   const { cart, removeItem, updateQuantity } = useCart();
   const navigate = useNavigate();
+  const { identity } = useInternetIdentity();
+  const { openLoginModal } = useLoginModal();
 
   // Lock body scroll when drawer is open
   useEffect(() => {
@@ -52,6 +56,10 @@ export default function CartDrawer() {
 
   const handleCheckout = () => {
     closeDrawer();
+    if (!identity) {
+      openLoginModal();
+      return;
+    }
     navigate({ to: "/checkout" });
   };
 

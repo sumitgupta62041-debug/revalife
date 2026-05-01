@@ -12,16 +12,101 @@ import {
 } from "@/components/ui/select";
 import { useNavigate } from "@tanstack/react-router";
 import { Banknote, Check, Copy, MapPin, Smartphone } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useLoginModal } from "../App";
 import { type Address, type CustomerDetails, PaymentMethod } from "../backend";
 import { useCart } from "../hooks/useCart";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useCreateOrder } from "../hooks/useOrders";
 import { useProfile } from "../hooks/useProfile";
 
 const LPU_CITY = "Phagwara";
 const LPU_STATE = "Punjab";
 const LPU_PINCODE = "144411";
+
+// ── Country codes ──────────────────────────────────────────────────────────────
+interface CountryCode {
+  code: string;
+  dialCode: string;
+  flag: string;
+  placeholder: string;
+  /** regex to validate the local number (without dial code) */
+  localPattern: RegExp;
+}
+
+const COUNTRY_CODES: CountryCode[] = [
+  {
+    code: "IN",
+    dialCode: "+91",
+    flag: "🇮🇳",
+    placeholder: "Enter 10-digit number",
+    localPattern: /^[6-9]\d{9}$/,
+  },
+  {
+    code: "US",
+    dialCode: "+1",
+    flag: "🇺🇸",
+    placeholder: "Enter phone number",
+    localPattern: /^\d{7,15}$/,
+  },
+  {
+    code: "GB",
+    dialCode: "+44",
+    flag: "🇬🇧",
+    placeholder: "Enter phone number",
+    localPattern: /^\d{7,15}$/,
+  },
+  {
+    code: "AE",
+    dialCode: "+971",
+    flag: "🇦🇪",
+    placeholder: "Enter phone number",
+    localPattern: /^\d{7,15}$/,
+  },
+  {
+    code: "CA",
+    dialCode: "+1",
+    flag: "🇨🇦",
+    placeholder: "Enter phone number",
+    localPattern: /^\d{7,15}$/,
+  },
+  {
+    code: "AU",
+    dialCode: "+61",
+    flag: "🇦🇺",
+    placeholder: "Enter phone number",
+    localPattern: /^\d{7,15}$/,
+  },
+  {
+    code: "SG",
+    dialCode: "+65",
+    flag: "🇸🇬",
+    placeholder: "Enter phone number",
+    localPattern: /^\d{7,15}$/,
+  },
+  {
+    code: "NP",
+    dialCode: "+977",
+    flag: "🇳🇵",
+    placeholder: "Enter phone number",
+    localPattern: /^\d{7,15}$/,
+  },
+  {
+    code: "PK",
+    dialCode: "+92",
+    flag: "🇵🇰",
+    placeholder: "Enter phone number",
+    localPattern: /^\d{7,15}$/,
+  },
+  {
+    code: "BD",
+    dialCode: "+880",
+    flag: "🇧🇩",
+    placeholder: "Enter phone number",
+    localPattern: /^\d{7,15}$/,
+  },
+];
 
 function StepCircle({ n, completed }: { n: number; completed: boolean }) {
   return (
@@ -36,8 +121,32 @@ export default function Checkout() {
   const { cart, isLoading: cartLoading } = useCart();
   const { profile } = useProfile();
   const createOrderMutation = useCreateOrder();
+  const { identity } = useInternetIdentity();
+  const { openLoginModal } = useLoginModal();
+
+  // Auth guard
+  useEffect(() => {
+    if (!identity) {
+      navigate({ to: "/cart" });
+      openLoginModal();
+    }
+  }, [identity, navigate, openLoginModal]);
 
   const [step, setStep] = useState(1);
+
+  // ── Country code state ──────────────────────────────────────────────────────
+  const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
+    COUNTRY_CODES[0],
+  );
+  // Raw local digits (without dial code) that the user types
+  const [localPhone, setLocalPhone] = useState(() => {
+    const saved = profile?.phone || "";
+    // Strip +91 prefix if pre-filled
+    return saved.startsWith("+91")
+      ? saved.slice(3)
+      : saved.replace(/^\+\d{1,4}/, "");
+  });
+
   const [customerDetails, setCustomerDetails] = useState<CustomerDetails>({
     name: profile?.name || "",
     email: profile?.email || "",
@@ -55,6 +164,14 @@ export default function Checkout() {
   );
   const [selectedAddressIndex, setSelectedAddressIndex] =
     useState<string>("new");
+
+  // Keep customerDetails.phone in sync with country + localPhone
+  useEffect(() => {
+    const fullPhone = localPhone
+      ? `${selectedCountry.dialCode}${localPhone}`
+      : "";
+    setCustomerDetails((prev) => ({ ...prev, phone: fullPhone }));
+  }, [localPhone, selectedCountry]);
 
   const handleSelectSavedAddress = (index: string) => {
     setSelectedAddressIndex(index);
@@ -77,29 +194,36 @@ export default function Checkout() {
     }
   };
 
-  const validateStep1 = () => {
-    if (
-      !customerDetails.name ||
-      !customerDetails.email ||
-      !customerDetails.phone
-    ) {
+  const validateStep1 = useCallback(() => {
+    if (!customerDetails.name || !customerDetails.email || !localPhone) {
       toast.error("Please fill all customer details");
       return false;
     }
-    if (!customerDetails.phone.match(/^\+?91[6-9]\d{9}$/)) {
-      toast.error("Please enter a valid Indian phone number (+91XXXXXXXXXX)");
+    if (!selectedCountry.localPattern.test(localPhone.replace(/\s/g, ""))) {
+      if (selectedCountry.code === "IN") {
+        toast.error(
+          "Please enter a valid 10-digit Indian mobile number (starts with 6–9)",
+        );
+      } else {
+        toast.error("Please enter a valid phone number (7–15 digits)");
+      }
       return false;
     }
     return true;
-  };
+  }, [
+    customerDetails.name,
+    customerDetails.email,
+    localPhone,
+    selectedCountry,
+  ]);
 
-  const validateStep2 = () => {
+  const validateStep2 = useCallback(() => {
     if (!shippingAddress.line1) {
       toast.error("Please enter your room/hostel/block number");
       return false;
     }
     return true;
-  };
+  }, [shippingAddress.line1]);
 
   const handlePlaceOrder = async () => {
     if (!validateStep2()) return;
@@ -203,25 +327,81 @@ export default function Checkout() {
                     />
                   </div>
                 </div>
+
+                {/* ── Phone with Country Code ── */}
                 <div className="space-y-1.5">
                   <Label htmlFor="phone" className="text-sm font-medium">
                     Phone Number *
                   </Label>
-                  <Input
-                    id="phone"
-                    placeholder="+91XXXXXXXXXX"
-                    value={customerDetails.phone}
-                    onChange={(e) =>
-                      setCustomerDetails({
-                        ...customerDetails,
-                        phone: e.target.value,
-                      })
-                    }
-                    disabled={step > 1}
-                    className="rounded-lg"
-                    data-ocid="checkout.phone_input"
-                  />
+                  <div className="flex gap-2">
+                    {/* Country code selector */}
+                    <Select
+                      value={selectedCountry.code}
+                      onValueChange={(code) => {
+                        const country = COUNTRY_CODES.find(
+                          (c) => c.code === code,
+                        );
+                        if (country) setSelectedCountry(country);
+                      }}
+                      disabled={step > 1}
+                    >
+                      <SelectTrigger
+                        className="w-[110px] shrink-0 rounded-lg font-medium"
+                        data-ocid="checkout.country_code_select"
+                      >
+                        <SelectValue>
+                          <span className="flex items-center gap-1.5">
+                            <span>{selectedCountry.flag}</span>
+                            <span className="text-xs font-semibold text-foreground">
+                              {selectedCountry.dialCode}
+                            </span>
+                          </span>
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTRY_CODES.map((c) => (
+                          <SelectItem key={c.code} value={c.code}>
+                            <span className="flex items-center gap-2">
+                              <span>{c.flag}</span>
+                              <span className="font-medium">{c.dialCode}</span>
+                              <span className="text-muted-foreground text-xs">
+                                {c.code}
+                              </span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Local phone digits */}
+                    <Input
+                      id="phone"
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder={selectedCountry.placeholder}
+                      value={localPhone}
+                      onChange={(e) => {
+                        // Allow only digits and spaces
+                        const digits = e.target.value.replace(/[^\d\s]/g, "");
+                        setLocalPhone(digits);
+                      }}
+                      disabled={step > 1}
+                      className="rounded-lg flex-1"
+                      data-ocid="checkout.phone_input"
+                    />
+                  </div>
+                  {/* Preview of full stored number */}
+                  {localPhone && (
+                    <p className="text-xs text-muted-foreground pl-1">
+                      Will be stored as:{" "}
+                      <span className="font-mono font-semibold text-foreground">
+                        {selectedCountry.dialCode}
+                        {localPhone.replace(/\s/g, "")}
+                      </span>
+                    </p>
+                  )}
                 </div>
+
                 {step === 1 && (
                   <Button
                     onClick={() => {

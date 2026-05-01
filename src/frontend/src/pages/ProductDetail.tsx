@@ -14,11 +14,13 @@ import {
   ShoppingCart,
   XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLoginModal } from "../App";
+import type { PendingCartAction } from "../App";
 import { ProductCategory } from "../backend";
 import { ProductCard } from "../components/ProductCard";
+import { ProductImageFallback } from "../components/ProductImageFallback";
 import { useCartDrawer } from "../contexts/CartDrawerContext";
 import { useCart } from "../hooks/useCart";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -37,19 +39,59 @@ export default function ProductDetail() {
   const { id } = useParams({ from: "/products/$id" });
   const navigate = useNavigate();
   const { identity } = useInternetIdentity();
-  const { openLoginModal } = useLoginModal();
+  const { openLoginModalWithAction } = useLoginModal();
   const { data: product, isLoading } = useGetProduct(id);
   const { addToCart, isAddingToCart } = useCart();
   const { openDrawer } = useCartDrawer();
   const [quantity, setQuantity] = useState(1);
+  const [imgFailed, setImgFailed] = useState(false);
+  const [addedFeedback, setAddedFeedback] = useState(false);
+
+  // Keep a stable ref to the current quantity so event handlers don't go stale
+  const quantityRef = useRef(quantity);
+  useEffect(() => {
+    quantityRef.current = quantity;
+  }, [quantity]);
 
   const isAuthenticated = !!identity;
 
-  // Scroll to top whenever product detail opens
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on id change
+  // Reset image failed state when product changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll + reset on id change
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
+    setImgFailed(false);
+    setAddedFeedback(false);
   }, [id]);
+
+  // ── Listen for replay events dispatched by PostLoginReplayer after login ──
+  // biome-ignore lint/correctness/useExhaustiveDependencies: product can be null on mount
+  useEffect(() => {
+    if (!product) return;
+
+    const handler = async (e: Event) => {
+      const action = (e as CustomEvent<PendingCartAction>).detail;
+      if (action.type !== "addToCart" || action.productId !== product.id)
+        return;
+
+      try {
+        await addToCart(product.id, action.quantity);
+        openDrawer({
+          id: product.id,
+          name: product.name,
+          price: Number(product.price),
+          imageUrl: product.imageUrl,
+        });
+        setAddedFeedback(true);
+        setTimeout(() => setAddedFeedback(false), 1500);
+      } catch {
+        // useCart.onError already shows the toast
+      }
+    };
+
+    window.addEventListener("revalife:replayCartAction", handler);
+    return () =>
+      window.removeEventListener("revalife:replayCartAction", handler);
+  }, [product?.id, addToCart, openDrawer]);
 
   const relatedProducts = product
     ? FALLBACK_PRODUCTS.filter(
@@ -58,34 +100,64 @@ export default function ProductDetail() {
     : [];
 
   const handleAddToCart = async () => {
+    if (!product) return;
+
+    // ── Pre-auth check: queue action BEFORE attempting mutation ───────────
     if (!isAuthenticated) {
-      openLoginModal();
+      openLoginModalWithAction({
+        type: "addToCart",
+        productId: product.id,
+        quantity: BigInt(quantity),
+        drawerData: {
+          id: product.id,
+          name: product.name,
+          price: Number(product.price),
+          imageUrl: product.imageUrl,
+        },
+      });
       return;
     }
-    if (!product) return;
+
     try {
-      await addToCart(id, BigInt(quantity));
+      // Use product.id (canonical backend ID) — NOT the URL param `id`
+      await addToCart(product.id, BigInt(quantity));
       openDrawer({
         id: product.id,
         name: product.name,
         price: Number(product.price),
         imageUrl: product.imageUrl,
       });
+      setAddedFeedback(true);
+      setTimeout(() => setAddedFeedback(false), 1500);
     } catch {
-      toast.error("Failed to add to cart");
+      // useCart.onError already shows the toast
     }
   };
 
   const handleBuyNow = async () => {
     if (!isAuthenticated) {
-      openLoginModal();
+      // Queue a buy-now as an add-to-cart action then navigate after replay
+      if (!product) return;
+      openLoginModalWithAction({
+        type: "addToCart",
+        productId: product.id,
+        quantity: BigInt(quantity),
+        drawerData: {
+          id: product.id,
+          name: product.name,
+          price: Number(product.price),
+          imageUrl: product.imageUrl,
+        },
+      });
+      // After login + add, user can proceed from cart drawer
       return;
     }
+    if (!product) return;
     try {
-      await addToCart(id, BigInt(quantity));
+      await addToCart(product.id, BigInt(quantity));
       navigate({ to: "/checkout" });
     } catch {
-      toast.error("Failed to proceed to checkout");
+      toast.error("Failed to proceed to checkout. Please try again.");
     }
   };
 
@@ -139,6 +211,9 @@ export default function ProductDetail() {
     );
   }
 
+  const categoryLabel =
+    categoryLabels[product.category] ?? (product.category as string);
+
   return (
     <div className="min-h-screen bg-background py-10 md:py-14">
       <div className="container mx-auto px-4">
@@ -167,15 +242,26 @@ export default function ProductDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
           {/* Image */}
           <div className="aspect-square w-full rounded-2xl overflow-hidden border border-border/50 shadow-card bg-muted">
-            <img
-              src={product.imageUrl}
-              alt={product.name}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src =
-                  "/assets/images/placeholder.svg";
-              }}
-            />
+            {imgFailed ? (
+              <ProductImageFallback
+                name={product.name}
+                categoryLabel={product.category as string}
+                className="w-full h-full"
+              />
+            ) : (
+              <img
+                src={product.imageUrl}
+                alt={product.name}
+                loading="lazy"
+                decoding="async"
+                crossOrigin="anonymous"
+                referrerPolicy="no-referrer"
+                width={600}
+                height={600}
+                className="w-full h-full object-cover"
+                onError={() => setImgFailed(true)}
+              />
+            )}
           </div>
 
           {/* Details */}
@@ -183,7 +269,7 @@ export default function ProductDetail() {
             {/* Category + Stock badges */}
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="bg-wellness-green/10 text-wellness-green border border-wellness-green/30 rounded-full px-3 py-1 text-xs font-semibold hover:bg-wellness-green/10">
-                {categoryLabels[product.category]}
+                {categoryLabel}
               </Badge>
               {product.inStock ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -256,7 +342,11 @@ export default function ProductDetail() {
                 data-ocid="product.add_to_cart_button"
               >
                 <ShoppingCart className="mr-2 h-5 w-5" />
-                {isAddingToCart ? "Adding…" : "Add to Cart"}
+                {isAddingToCart
+                  ? "Adding…"
+                  : addedFeedback
+                    ? "Added! ✓"
+                    : "Add to Cart"}
               </Button>
               <Button
                 onClick={handleBuyNow}

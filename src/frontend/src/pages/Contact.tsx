@@ -24,6 +24,8 @@ const CONTACT_ITEMS = [
     numbers: [
       { label: "+91 8942932189", href: "tel:+918942932189" },
       { label: "+91 8700829733", href: "tel:+918700829733" },
+      { label: "+91 884 037 8589", href: "tel:+918840378589" },
+      { label: "+91 93364 57006", href: "tel:+919336457006" },
     ],
     href: null,
     linkLabel: null,
@@ -243,6 +245,24 @@ export default function Contact() {
                 <SiWhatsapp className="h-5 w-5" />
                 Start WhatsApp Chat
               </a>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                {[
+                  { num: "+91 8942932189", tel: "918942932189" },
+                  { num: "+91 884 037 8589", tel: "918840378589" },
+                  { num: "+91 93364 57006", tel: "919336457006" },
+                ].map(({ num, tel }) => (
+                  <a
+                    key={tel}
+                    href={`https://wa.me/${tel}?text=Hi%20revAlife%2C%20I%20need%20help`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-white/20 text-white border border-white/30 px-4 py-2 rounded-full text-sm font-medium hover:bg-white/30 transition-smooth"
+                  >
+                    <SiWhatsapp className="h-3.5 w-3.5" />
+                    {num}
+                  </a>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </div>

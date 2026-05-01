@@ -39,6 +39,7 @@ export function useGetUserOrders() {
 
 export function useCreateOrder() {
   const { actor } = useActor();
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -51,7 +52,8 @@ export function useCreateOrder() {
       shippingAddress: Address;
       paymentMethod: PaymentMethod;
     }) => {
-      if (!actor) throw new Error("Actor not available");
+      if (!identity) throw new Error("You must be logged in to place an order");
+      if (!actor) throw new Error("Actor not available — please try again");
       return actor.createOrder(customerDetails, shippingAddress, paymentMethod);
     },
     onSuccess: () => {

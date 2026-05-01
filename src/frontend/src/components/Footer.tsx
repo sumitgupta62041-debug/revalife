@@ -98,6 +98,22 @@ export default function Footer() {
                   +91 8700829733
                 </a>
               </li>
+              <li>
+                <a
+                  href="tel:+918840378589"
+                  className="hover:text-wellness-green transition-colors duration-200"
+                >
+                  +91 884 037 8589
+                </a>
+              </li>
+              <li>
+                <a
+                  href="tel:+919336457006"
+                  className="hover:text-wellness-green transition-colors duration-200"
+                >
+                  +91 93364 57006
+                </a>
+              </li>
               <li className="pt-1 text-xs">
                 Lovely Professional University
                 <br />
