@@ -9,7 +9,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLoginModal } from "../App";
 import { useCartDrawer } from "../contexts/CartDrawerContext";
 import { useCart } from "../hooks/useCart";
@@ -17,6 +17,131 @@ import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
 const SHIPPING_COST = 15;
 const FREE_SHIPPING_THRESHOLD = 500;
+
+// ─── Serialized-mutation qty control ─────────────────────────────────────────
+// Pattern:
+//   1. localQty updates instantly on every click — immediate visual feedback.
+//   2. pendingQtyRef holds the latest desired quantity to send (if a mutation
+//      is in-flight and a new click comes in, we just overwrite pendingQtyRef).
+//   3. isMutatingRef gates the mutation: only ONE mutation runs at a time.
+//   4. When a mutation finishes, if pendingQtyRef has a new value queued,
+//      runMutation fires again immediately — no missed clicks, no race.
+//   5. On error: revert localQty to last known good (initialQty).
+//   6. isMutatingState (useState mirror of isMutatingRef) drives re-renders
+//      so disabled state on buttons updates correctly.
+
+interface QtyControlProps {
+  productId: string;
+  initialQty: number;
+  onUpdate: (productId: string, qty: bigint) => Promise<void>;
+  onRemove: (productId: string) => void;
+  index: number;
+}
+
+function QtyControl({
+  productId,
+  initialQty,
+  onUpdate,
+  onRemove,
+  index,
+}: QtyControlProps) {
+  const [localQty, setLocalQty] = useState(initialQty);
+  // useState mirror so button disabled state re-renders correctly
+  const [isMutatingState, setIsMutatingState] = useState(false);
+
+  // Refs — never cause re-renders, always current in async callbacks
+  const isMutatingRef = useRef(false);
+  const pendingQtyRef = useRef<number | null>(null);
+  // Track last known good qty for error revert
+  const lastGoodQtyRef = useRef(initialQty);
+
+  // Sync from server when not mutating (parent refetched fresh data)
+  useEffect(() => {
+    if (!isMutatingRef.current && pendingQtyRef.current === null) {
+      setLocalQty(initialQty);
+      lastGoodQtyRef.current = initialQty;
+    }
+  }, [initialQty]);
+
+  const runMutation = useCallback(async () => {
+    if (pendingQtyRef.current === null) return;
+
+    isMutatingRef.current = true;
+    setIsMutatingState(true);
+
+    const qtyToSend = pendingQtyRef.current;
+    pendingQtyRef.current = null;
+
+    try {
+      await onUpdate(productId, BigInt(qtyToSend));
+      lastGoodQtyRef.current = qtyToSend;
+    } catch {
+      // Revert display to last known good on error
+      setLocalQty(lastGoodQtyRef.current);
+    } finally {
+      isMutatingRef.current = false;
+      setIsMutatingState(false);
+      // If a new click came in while we were mutating, fire again immediately
+      if (pendingQtyRef.current !== null) {
+        runMutation();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId, onUpdate]);
+
+  const handleClick = (delta: number) => {
+    const newQty = localQty + delta;
+
+    if (newQty < 1) {
+      // Remove item immediately — cancel any pending mutation
+      pendingQtyRef.current = null;
+      onRemove(productId);
+      return;
+    }
+
+    // Instant UI feedback
+    setLocalQty(newQty);
+    // Queue the new desired value
+    pendingQtyRef.current = newQty;
+
+    // Only start a new mutation chain if none is running
+    if (!isMutatingRef.current) {
+      runMutation();
+    }
+    // If mutating: we just updated pendingQtyRef — runMutation will pick it
+    // up when the current mutation completes (see finally block above).
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5">
+      <button
+        type="button"
+        onClick={() => handleClick(-1)}
+        disabled={localQty <= 1 || isMutatingState}
+        aria-label="Decrease quantity"
+        className="h-6 w-6 rounded-full border border-border flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
+        data-ocid={`cart.decrease_qty.${index + 1}`}
+      >
+        <Minus className="h-3 w-3" />
+      </button>
+      <span className="text-xs font-semibold w-5 text-center select-none">
+        {localQty}
+      </span>
+      <button
+        type="button"
+        onClick={() => handleClick(1)}
+        disabled={isMutatingState}
+        aria-label="Increase quantity"
+        className="h-6 w-6 rounded-full border border-border flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
+        data-ocid={`cart.increase_qty.${index + 1}`}
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+// ─── CartDrawer ───────────────────────────────────────────────────────────────
 
 export default function CartDrawer() {
   const { isOpen, lastAddedProduct, closeDrawer } = useCartDrawer();
@@ -201,45 +326,17 @@ export default function CartDrawer() {
                     <p className="text-sm font-bold text-wellness-green mt-0.5 font-display">
                       ₹
                       {(
-                        Number(item.price) * Number(item.quantity)
+                        Number(item.product.price) * Number(item.quantity)
                       ).toLocaleString("en-IN")}
                     </p>
-                    {/* Qty controls */}
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          Number(item.quantity) > 1
-                            ? updateQuantity(
-                                item.product.id,
-                                BigInt(Number(item.quantity) - 1),
-                              )
-                            : removeItem(item.product.id)
-                        }
-                        aria-label="Decrease quantity"
-                        className="h-6 w-6 rounded-full border border-border flex items-center justify-center hover:bg-muted transition-colors"
-                        data-ocid={`cart.decrease_qty.${index + 1}`}
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="text-xs font-semibold w-5 text-center">
-                        {Number(item.quantity)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateQuantity(
-                            item.product.id,
-                            BigInt(Number(item.quantity) + 1),
-                          )
-                        }
-                        aria-label="Increase quantity"
-                        className="h-6 w-6 rounded-full border border-border flex items-center justify-center hover:bg-muted transition-colors"
-                        data-ocid={`cart.increase_qty.${index + 1}`}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                    </div>
+                    {/* Debounced qty controls — instant local feedback */}
+                    <QtyControl
+                      productId={item.product.id}
+                      initialQty={Number(item.quantity)}
+                      onUpdate={updateQuantity}
+                      onRemove={removeItem}
+                      index={index}
+                    />
                   </div>
                   <button
                     type="button"

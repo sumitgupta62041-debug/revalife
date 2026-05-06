@@ -154,6 +154,7 @@ export interface _SERVICE {
   'canCancelOrder' : ActorMethod<[string], boolean>,
   'canReturnOrder' : ActorMethod<[string], boolean>,
   'cancelOrder' : ActorMethod<[string, [] | [string]], CafResult_1>,
+  'claimAdminIfNoneExists' : ActorMethod<[], CafResult_1>,
   'clearCart' : ActorMethod<[], undefined>,
   'createOrUpdateProfile' : ActorMethod<[string, string, string], undefined>,
   'createOrder' : ActorMethod<

@@ -35,17 +35,25 @@ const categoryLabels: Record<ProductCategory, string> = {
   [ProductCategory.digestiveHealth]: "Digestive Health",
 };
 
+/** Sleep helper for retry delays */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export default function ProductDetail() {
   const { id } = useParams({ from: "/products/$id" });
   const navigate = useNavigate();
   const { identity } = useInternetIdentity();
   const { openLoginModalWithAction } = useLoginModal();
-  const { data: product, isLoading } = useGetProduct(id);
+  const { data: backendProduct, isLoading } = useGetProduct(id);
   const { addToCart, isAddingToCart } = useCart();
   const { openDrawer } = useCartDrawer();
   const [quantity, setQuantity] = useState(1);
   const [imgFailed, setImgFailed] = useState(false);
   const [addedFeedback, setAddedFeedback] = useState(false);
+
+  // ── Resolve product: backend result OR fallback by id ──────────────────────
+  // This ensures buttons are NEVER disabled because backend was slow to respond.
+  const product =
+    backendProduct ?? FALLBACK_PRODUCTS.find((p) => p.id === id) ?? null;
 
   // Keep a stable ref to the current quantity so event handlers don't go stale
   const quantityRef = useRef(quantity);
@@ -63,6 +71,64 @@ export default function ProductDetail() {
     setAddedFeedback(false);
   }, [id]);
 
+  // ── On mount: check localStorage for pending cart action (event may have fired before mount) ──
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once product is resolved
+  useEffect(() => {
+    if (!product) return;
+
+    const replayFromLocalStorage = async () => {
+      try {
+        const stored = localStorage.getItem("revalife_pending_cart_action");
+        if (!stored) return;
+        const parsed = JSON.parse(stored) as {
+          type: string;
+          productId: string;
+          quantity: string;
+        };
+        if (parsed.type !== "addToCart" || parsed.productId !== product.id)
+          return;
+
+        console.log(
+          "[ProductDetail] localStorage replay:",
+          product.id,
+          "qty",
+          parsed.quantity,
+        );
+        localStorage.removeItem("revalife_pending_cart_action");
+
+        const qty = BigInt(parsed.quantity);
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            await addToCart(product.id, qty);
+            openDrawer({
+              id: product.id,
+              name: product.name,
+              price: Number(product.price),
+              imageUrl: product.imageUrl,
+            });
+            setAddedFeedback(true);
+            setTimeout(() => setAddedFeedback(false), 1500);
+            return;
+          } catch (err) {
+            console.warn(
+              `[ProductDetail] localStorage replay attempt ${attempt} failed:`,
+              err,
+            );
+            if (attempt < 3) await sleep(500);
+          }
+        }
+        toast.error("Could not add to cart. Please try again.", {
+          action: { label: "Retry", onClick: () => handleAddToCart() },
+        });
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    replayFromLocalStorage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id]);
+
   // ── Listen for replay events dispatched by PostLoginReplayer after login ──
   // biome-ignore lint/correctness/useExhaustiveDependencies: product can be null on mount
   useEffect(() => {
@@ -73,24 +139,49 @@ export default function ProductDetail() {
       if (action.type !== "addToCart" || action.productId !== product.id)
         return;
 
-      try {
-        await addToCart(product.id, action.quantity);
-        openDrawer({
-          id: product.id,
-          name: product.name,
-          price: Number(product.price),
-          imageUrl: product.imageUrl,
-        });
-        setAddedFeedback(true);
-        setTimeout(() => setAddedFeedback(false), 1500);
-      } catch {
-        // useCart.onError already shows the toast
+      console.log(
+        "[ProductDetail] replay: adding",
+        product.id,
+        "qty",
+        action.quantity,
+      );
+      // Clear localStorage since we're handling via event
+      localStorage.removeItem("revalife_pending_cart_action");
+
+      // Retry up to 3 times with 500ms delay — actor may still be initialising
+      let lastErr: unknown;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await addToCart(product.id, action.quantity);
+          openDrawer({
+            id: product.id,
+            name: product.name,
+            price: Number(product.price),
+            imageUrl: product.imageUrl,
+          });
+          setAddedFeedback(true);
+          setTimeout(() => setAddedFeedback(false), 1500);
+          return; // success — exit loop
+        } catch (err) {
+          lastErr = err;
+          console.warn(
+            `[ProductDetail] replay attempt ${attempt} failed:`,
+            err,
+          );
+          if (attempt < 3) await sleep(500);
+        }
       }
+      // All retries exhausted
+      console.error("[ProductDetail] replay exhausted retries:", lastErr);
+      toast.error("Could not add to cart. Please refresh and try again.", {
+        action: { label: "Retry", onClick: () => handleAddToCart() },
+      });
     };
 
     window.addEventListener("revalife:replayCartAction", handler);
     return () =>
       window.removeEventListener("revalife:replayCartAction", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id, addToCart, openDrawer]);
 
   const relatedProducts = product
@@ -102,7 +193,7 @@ export default function ProductDetail() {
   const handleAddToCart = async () => {
     if (!product) return;
 
-    // ── Pre-auth check: queue action BEFORE attempting mutation ───────────
+    // Pre-auth check: queue action BEFORE attempting mutation
     if (!isAuthenticated) {
       openLoginModalWithAction({
         type: "addToCart",
@@ -118,25 +209,36 @@ export default function ProductDetail() {
       return;
     }
 
-    try {
-      // Use product.id (canonical backend ID) — NOT the URL param `id`
-      await addToCart(product.id, BigInt(quantity));
-      openDrawer({
-        id: product.id,
-        name: product.name,
-        price: Number(product.price),
-        imageUrl: product.imageUrl,
-      });
-      setAddedFeedback(true);
-      setTimeout(() => setAddedFeedback(false), 1500);
-    } catch {
-      // useCart.onError already shows the toast
+    console.log("[ProductDetail] addToCart:", product.id, "qty:", quantity);
+
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await addToCart(product.id, BigInt(quantity));
+        openDrawer({
+          id: product.id,
+          name: product.name,
+          price: Number(product.price),
+          imageUrl: product.imageUrl,
+        });
+        setAddedFeedback(true);
+        setTimeout(() => setAddedFeedback(false), 1500);
+        return;
+      } catch (err) {
+        lastErr = err;
+        console.warn(
+          `[ProductDetail] addToCart attempt ${attempt} failed:`,
+          err,
+        );
+        if (attempt < 2) await sleep(500);
+      }
     }
+    console.error("[ProductDetail] addToCart failed after retries:", lastErr);
+    toast.error("Could not add to cart. Please try again.");
   };
 
   const handleBuyNow = async () => {
     if (!isAuthenticated) {
-      // Queue a buy-now as an add-to-cart action then navigate after replay
       if (!product) return;
       openLoginModalWithAction({
         type: "addToCart",
@@ -149,16 +251,24 @@ export default function ProductDetail() {
           imageUrl: product.imageUrl,
         },
       });
-      // After login + add, user can proceed from cart drawer
       return;
     }
     if (!product) return;
-    try {
-      await addToCart(product.id, BigInt(quantity));
-      navigate({ to: "/checkout" });
-    } catch {
-      toast.error("Failed to proceed to checkout. Please try again.");
+
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await addToCart(product.id, BigInt(quantity));
+        navigate({ to: "/checkout" });
+        return;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[ProductDetail] buyNow attempt ${attempt} failed:`, err);
+        if (attempt < 2) await sleep(500);
+      }
     }
+    console.error("[ProductDetail] buyNow failed:", lastErr);
+    toast.error("Failed to proceed to checkout. Please try again.");
   };
 
   const handleWhatsAppShare = () => {
@@ -169,7 +279,7 @@ export default function ProductDetail() {
     window.open(`https://wa.me/?text=${msg}`, "_blank");
   };
 
-  if (isLoading) {
+  if (isLoading && !product) {
     return (
       <div className="min-h-screen bg-background py-12">
         <div className="container mx-auto px-4">

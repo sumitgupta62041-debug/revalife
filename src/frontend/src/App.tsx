@@ -229,9 +229,19 @@ declare module "@tanstack/react-router" {
 // ─── Post-Login Action Replayer ───────────────────────────────────────────────
 // Watches for the transition: unauthenticated → authenticated + actor ready,
 // then dispatches the queued cart action so any mounted component can replay it.
-// Two-phase design handles the race where identity arrives before actor is ready:
+//
+// Race-condition fix:
 //   Phase 1 — on login: detect auth transition, capture pending action into localRef
-//   Phase 2 — on actor ready: if localRef has an action, dispatch and clear
+//   Phase 2 — on actor ready: wait an additional 300ms, then dispatch with up to
+//              3 retries (500ms apart) if the downstream handler throws.
+
+const REPLAY_DELAY_MS = 300;
+const REPLAY_MAX_RETRIES = 3;
+const REPLAY_RETRY_DELAY_MS = 500;
+
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
 
 function PostLoginReplayer({
   consumePendingAction,
@@ -242,8 +252,9 @@ function PostLoginReplayer({
   const { actor, isFetching: actorFetching } = useActor();
   const wasAuthenticatedRef = useRef(false);
   // Holds an action that was captured at login time but not yet dispatched
-  // (actor may still be initializing)
   const capturedActionRef = useRef<PendingCartAction | null>(null);
+  // Prevents double-dispatch when actor flickers
+  const dispatchingRef = useRef(false);
 
   // Phase 1: detect login transition and capture the pending action
   useEffect(() => {
@@ -257,6 +268,11 @@ function PostLoginReplayer({
     const pending = consumePendingAction();
     if (pending) {
       capturedActionRef.current = pending;
+      dispatchingRef.current = false;
+      console.log(
+        "[PostLoginReplayer] Phase 1: captured action",
+        pending.productId,
+      );
     }
   }, [identity, consumePendingAction]);
 
@@ -264,12 +280,83 @@ function PostLoginReplayer({
   useEffect(() => {
     if (!identity || !actor || actorFetching) return;
     const pending = capturedActionRef.current;
-    if (!pending) return;
+    if (!pending || dispatchingRef.current) return;
 
-    capturedActionRef.current = null;
-    window.dispatchEvent(
-      new CustomEvent("revalife:replayCartAction", { detail: pending }),
-    );
+    dispatchingRef.current = true;
+
+    const dispatch = async () => {
+      // Wait for actor to fully stabilise before dispatching
+      await sleep(REPLAY_DELAY_MS);
+
+      for (let attempt = 1; attempt <= REPLAY_MAX_RETRIES; attempt++) {
+        console.log(
+          `[PostLoginReplayer] Phase 2: attempt ${attempt} dispatching`,
+          pending.productId,
+        );
+        try {
+          await new Promise<void>((resolve, reject) => {
+            // One-shot listener to know if the downstream handler succeeded
+            const ackHandler = (e: Event) => {
+              const ev = e as CustomEvent<{
+                success: boolean;
+                productId: string;
+              }>;
+              if (ev.detail?.productId === pending.productId) {
+                window.removeEventListener(
+                  "revalife:cartActionAck",
+                  ackHandler,
+                );
+                if (ev.detail.success) resolve();
+                else reject(new Error("ack:failure"));
+              }
+            };
+            window.addEventListener("revalife:cartActionAck", ackHandler);
+
+            // Store in localStorage BEFORE dispatching — so pages mounting
+            // after the event (e.g. lazy-loaded ProductDetail) can still replay.
+            localStorage.setItem(
+              "revalife_pending_cart_action",
+              JSON.stringify({
+                ...pending,
+                quantity: pending.quantity.toString(),
+              }),
+            );
+            // Auto-clear after 10s to prevent stale replays
+            setTimeout(() => {
+              localStorage.removeItem("revalife_pending_cart_action");
+            }, 10_000);
+
+            window.dispatchEvent(
+              new CustomEvent("revalife:replayCartAction", { detail: pending }),
+            );
+
+            // If nothing acks within 2s, resolve anyway (backward-compatible)
+            setTimeout(() => {
+              window.removeEventListener("revalife:cartActionAck", ackHandler);
+              resolve();
+            }, 2000);
+          });
+
+          console.log("[PostLoginReplayer] Phase 2: dispatch succeeded");
+          capturedActionRef.current = null;
+          localStorage.removeItem("revalife_pending_cart_action");
+          return; // success
+        } catch (err) {
+          console.warn(`[PostLoginReplayer] attempt ${attempt} failed:`, err);
+          if (attempt < REPLAY_MAX_RETRIES) await sleep(REPLAY_RETRY_DELAY_MS);
+        }
+      }
+
+      // All retries exhausted — clear so it doesn't loop
+      capturedActionRef.current = null;
+      dispatchingRef.current = false;
+      console.error(
+        "[PostLoginReplayer] all retries exhausted for",
+        pending.productId,
+      );
+    };
+
+    dispatch();
   }, [identity, actor, actorFetching]);
 
   return null;

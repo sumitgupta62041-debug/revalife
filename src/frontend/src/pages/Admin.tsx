@@ -70,7 +70,7 @@ import { useLoginModal } from "../App";
 import type { Order, Product, ProductCategory, ProductInput } from "../backend";
 import { OrderStatus } from "../backend";
 import { useActor } from "../hooks/useActor";
-import { useAdmin } from "../hooks/useAdmin";
+import { useAdmin, useClaimAdminIfNoneExists } from "../hooks/useAdmin";
 import {
   useAnalyticsSummary,
   useOrdersByDay,
@@ -694,6 +694,12 @@ function OrdersTab() {
     }
   }, [actor, isLoading, orders.length, refetch]);
 
+  // Called when the detail dialog closes — ensures fresh data is shown
+  const handleDialogClose = () => {
+    setSelectedOrder(null);
+    refetch();
+  };
+
   const filtered = orders.filter((o) => {
     const matchSearch =
       search === "" ||
@@ -873,10 +879,7 @@ function OrdersTab() {
       )}
 
       {selectedOrder && (
-        <OrderDetailDialog
-          order={selectedOrder}
-          onClose={() => setSelectedOrder(null)}
-        />
+        <OrderDetailDialog order={selectedOrder} onClose={handleDialogClose} />
       )}
     </div>
   );
@@ -1308,19 +1311,56 @@ export default function Admin() {
   const { isAdmin, isLoading: adminLoading } = useAdmin();
   const { actor } = useActor();
   const queryClient = useQueryClient();
+  const claimAdmin = useClaimAdminIfNoneExists();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // null = not attempted, 'pending' = in progress, 'done' = finished
+  const [claimState, setClaimState] = useState<"idle" | "pending" | "done">(
+    "idle",
+  );
 
-  // Auth guard — redirect non-admin users after check resolves
+  // Auth guard — attempt to claim admin if logged in but not yet admin
   useEffect(() => {
-    if (!adminLoading && identity && !isAdmin) {
-      toast.error("You don't have permission to access the admin panel.");
-      navigate({ to: "/" });
+    if (adminLoading || !identity) {
+      // If not logged in and loading is done, redirect with toast
+      if (!adminLoading && !identity) {
+        toast.error("Please login to access the admin panel.");
+        navigate({ to: "/" });
+      }
+      return;
     }
-  }, [adminLoading, identity, isAdmin, navigate]);
+    if (isAdmin) return;
+
+    // Logged in but not admin — try to claim
+    if (claimState === "idle" && actor) {
+      setClaimState("pending");
+      claimAdmin.mutate(undefined, {
+        onSuccess: () => {
+          // isAdmin query will refetch automatically via invalidation
+          setClaimState("done");
+        },
+        onError: () => {
+          setClaimState("done");
+          toast.error(
+            "Admin access required. Please login with your admin account.",
+          );
+          navigate({ to: "/" });
+        },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    adminLoading,
+    identity,
+    isAdmin,
+    actor,
+    claimState,
+    navigate,
+    claimAdmin.mutate,
+  ]);
 
   const { data: products = [], isLoading: productsLoading } = useQuery<
     Product[]
@@ -1420,17 +1460,21 @@ export default function Admin() {
     featured: products.filter((p) => p.featured).length,
   };
 
-  if (adminLoading) {
+  // Show loading while: checking admin status, OR claim is in progress, OR claim succeeded but isAdmin not yet refetched
+  const isClaiming = claimState === "pending" || claimAdmin.isPending;
+  const claimJustSucceeded =
+    claimState === "done" && claimAdmin.isSuccess && !isAdmin;
+
+  if (adminLoading || isClaiming || claimJustSucceeded) {
     return (
       <div
-        className="min-h-screen bg-background"
+        className="min-h-screen bg-background flex flex-col items-center justify-center gap-4"
         data-ocid="admin.loading_state"
       >
-        <div className="container mx-auto px-4 py-8 space-y-4">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-xl" />
-          ))}
-        </div>
+        <div className="h-12 w-12 rounded-full border-4 border-wellness-green border-t-transparent animate-spin" />
+        <p className="text-sm text-muted-foreground">
+          {isClaiming ? "Verifying admin access…" : "Loading admin panel…"}
+        </p>
       </div>
     );
   }
@@ -1457,15 +1501,20 @@ export default function Admin() {
                   : "Your account does not have admin privileges."}
               </p>
             </div>
-            {isNotLoggedIn && (
+            {isNotLoggedIn ? (
               <Button
                 onClick={openLoginModal}
                 data-ocid="admin.login_button"
                 className="bg-wellness-green hover:bg-wellness-green-dark text-white w-full"
                 size="lg"
               >
-                Login
+                Login with Admin Account
               </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground px-2">
+                This account does not have admin privileges. Please login with
+                the account used to deploy the store.
+              </p>
             )}
             <Button
               variant="outline"

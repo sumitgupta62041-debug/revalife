@@ -47,6 +47,9 @@ actor {
     featured : Bool;
   };
 
+  // Kept for stable variable compatibility with previous canister version
+  stable var seedDone : Bool = false;
+
   let products = Map.empty<Text, Product>();
 
   // Cart Types & State
@@ -164,9 +167,6 @@ actor {
     safetyInfo : Text;
   };
 
-  // Seed tracking
-  var seedDone : Bool = false;
-
   // Helper Functions
   func nextProductId() : Text {
     Time.now().toText();
@@ -191,9 +191,8 @@ actor {
   };
 
   func seedProducts() {
-    if (seedDone or not products.isEmpty()) { return };
-    seedDone := true;
-
+    // Always seed any missing products — no isEmpty guard so products are
+    // guaranteed to exist even after partial state or canister reset.
     let seed : [(Text, ProductInput)] = [
       ("p-ashwagandha", {
         name = "Ashwagandha KSM-66 Extract";
@@ -442,11 +441,28 @@ actor {
     isSafeAdmin(caller);
   };
 
+  // Allows the very first user to claim admin if no admin has been assigned yet.
+  // Safe to call repeatedly — once an admin exists this becomes a no-op and returns #err.
+  public shared ({ caller }) func claimAdminIfNoneExists() : async CafResult<()> {
+    if (caller.isAnonymous()) {
+      return #err("Authentication required: please log in before claiming admin");
+    };
+    if (accessControlState.adminAssigned) {
+      return #err("Admin already exists: admin access cannot be claimed again");
+    };
+    accessControlState.userRoles.add(caller, #admin);
+    accessControlState.adminAssigned := true;
+    #ok(());
+  };
+
   // Cart Operations
   public shared ({ caller }) func addToCart(productId : Text, quantity : Nat) : async () {
     if (quantity == 0) {
       Runtime.trap("Quantity must be greater than 0");
     };
+
+    // Always ensure all products are seeded before any cart operation
+    seedProducts();
 
     switch (products.get(productId)) {
       case (null) { Runtime.trap("Product does not exist") };
@@ -458,15 +474,18 @@ actor {
           addedAt = Time.now();
         };
 
+        // Get current cart or start fresh
         let existingCart = switch (carts.get(caller)) {
           case (null) { List.empty<CartItem>() };
           case (?cart) { cart };
         };
 
-        let updatedCart = existingCart.filter(func(item : CartItem) : Bool { item.productId != productId });
-        updatedCart.add(newItem);
-
-        carts.add(caller, updatedCart);
+        // Build a new list without any existing entry for this product
+        let filteredCart = existingCart.filter(func(item : CartItem) : Bool { item.productId != productId });
+        // Add the new item (mutates filteredCart in place — List.add is mutable)
+        filteredCart.add(newItem);
+        // Persist the updated cart back into the map
+        carts.add(caller, filteredCart);
       };
     };
   };
@@ -483,7 +502,8 @@ actor {
       case (?cart) { cart };
     };
 
-    existingCart.mapInPlace(
+    // List.map returns a NEW List — assign to updatedCart and persist
+    let updatedCart = existingCart.map<CartItem, CartItem>(
       func(item : CartItem) : CartItem {
         if (item.productId == productId) {
           { item with quantity }
@@ -493,7 +513,8 @@ actor {
       }
     );
 
-    carts.add(caller, existingCart);
+    // Explicitly store the new list back into the map
+    carts.add(caller, updatedCart);
   };
 
   public shared ({ caller }) func removeFromCart(productId : Text) : async () {
@@ -515,14 +536,15 @@ actor {
       case (?cart) { cart };
     };
 
-    let items = cart.toArray().map(
-      func(item : CartItem) : ProductWithQuantity {
+    let items = cart.toArray().filterMap(
+      func(item : CartItem) : ?ProductWithQuantity {
         switch (products.get(item.productId)) {
           case (?prod) {
-            { product = prod; quantity = item.quantity; price = prod.price * item.quantity };
+            ?{ product = prod; quantity = item.quantity; price = prod.price * item.quantity };
           };
           case (null) {
-            Runtime.trap("Product not found for cart item: " # item.productId);
+            // Orphaned cart item — product no longer exists, skip it gracefully
+            null
           };
         };
       }

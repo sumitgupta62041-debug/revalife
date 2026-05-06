@@ -104,6 +104,7 @@ export const mockBackend: backendInterface = {
   getTopSellingProducts: async () => [],
   getUserOrders: async () => [],
   getUserProfile: async () => null,
+  claimAdminIfNoneExists: async () => ({ __kind__: "ok" as const, ok: null }),
   isAdmin: async () => false,
   isCallerAdmin: async () => false,
   listAllProductsAdmin: async () => [sampleProduct1, sampleProduct2, sampleProduct3],

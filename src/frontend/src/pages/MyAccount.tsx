@@ -654,7 +654,6 @@ function MyAccountContent() {
                 profile.savedAddresses.length > 0 ? (
                   <div className="space-y-3">
                     {profile.savedAddresses.map((address, index) => (
-                      // biome-ignore lint/suspicious/noArrayIndexKey: addresses have no id
                       <div
                         key={`addr-${address.line1}-${index}`}
                         className="border border-border/50 rounded-xl p-4 flex items-start justify-between gap-3"

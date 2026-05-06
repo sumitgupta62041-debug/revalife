@@ -252,6 +252,7 @@ export interface backendInterface {
     canCancelOrder(orderId: string): Promise<boolean>;
     canReturnOrder(orderId: string): Promise<boolean>;
     cancelOrder(orderId: string, reason: string | null): Promise<CafResult_1>;
+    claimAdminIfNoneExists(): Promise<CafResult_1>;
     clearCart(): Promise<void>;
     createOrUpdateProfile(name: string, email: string, phone: string): Promise<void>;
     createOrder(customerDetails: CustomerDetails, shippingAddress: Address, paymentMethod: PaymentMethod): Promise<string>;
@@ -492,6 +493,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.cancelOrder(arg0, to_candid_opt_n14(this._uploadFile, this._downloadFile, arg1));
+            return from_candid_CafResult_1_n15(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async claimAdminIfNoneExists(): Promise<CafResult_1> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.claimAdminIfNoneExists();
+                return from_candid_CafResult_1_n15(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.claimAdminIfNoneExists();
             return from_candid_CafResult_1_n15(this._uploadFile, this._downloadFile, result);
         }
     }

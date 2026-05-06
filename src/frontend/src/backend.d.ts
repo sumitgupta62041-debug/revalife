@@ -152,6 +152,7 @@ export interface backendInterface {
     canCancelOrder(orderId: string): Promise<boolean>;
     canReturnOrder(orderId: string): Promise<boolean>;
     cancelOrder(orderId: string, reason: string | null): Promise<CafResult_1>;
+    claimAdminIfNoneExists(): Promise<CafResult_1>;
     clearCart(): Promise<void>;
     createOrUpdateProfile(name: string, email: string, phone: string): Promise<void>;
     createOrder(customerDetails: CustomerDetails, shippingAddress: Address, paymentMethod: PaymentMethod): Promise<string>;

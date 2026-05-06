@@ -311,7 +311,7 @@ export function useGetProduct(id: string) {
 }
 
 export function useListProducts(category: ProductCategory | null) {
-  const { actor, isFetching: isActorFetching } = useActor();
+  const { actor } = useActor();
 
   return useQuery<Product[]>({
     queryKey: ["products", category],
@@ -331,8 +331,8 @@ export function useListProducts(category: ProductCategory | null) {
       }
       return FALLBACK_PRODUCTS;
     },
-    // Always enabled — don't gate on actor so fallback data shows immediately
-    enabled: !isActorFetching || !actor,
+    // Always enabled — fallback data shows immediately regardless of actor state
+    enabled: true,
     staleTime: 5_000,
     gcTime: 120_000,
     retry: 1,
@@ -340,7 +340,7 @@ export function useListProducts(category: ProductCategory | null) {
 }
 
 export function useFeaturedProducts() {
-  const { actor, isFetching: isActorFetching } = useActor();
+  const { actor } = useActor();
 
   return useQuery<Product[]>({
     queryKey: ["featuredProducts"],
@@ -359,7 +359,8 @@ export function useFeaturedProducts() {
         ? featured.slice(0, 6)
         : FALLBACK_PRODUCTS.slice(0, 6);
     },
-    enabled: !isActorFetching || !actor,
+    // Always enabled — fallback data shows immediately regardless of actor state
+    enabled: true,
     staleTime: 5_000,
     gcTime: 120_000,
     retry: 1,

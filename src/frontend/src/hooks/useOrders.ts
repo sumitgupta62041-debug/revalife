@@ -95,7 +95,34 @@ export function useUpdateOrderStatus() {
       if (!actor) throw new Error("Actor not available");
       return actor.updateOrderStatus(orderId, newStatus);
     },
+    onMutate: async ({ orderId, newStatus }) => {
+      // Cancel any in-flight refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ["allOrders"] });
+      // Snapshot the previous value for rollback
+      const previousOrders = queryClient.getQueryData<
+        import("../backend").Order[]
+      >(["allOrders"]);
+      // Optimistically update the cached list
+      queryClient.setQueryData<import("../backend").Order[]>(
+        ["allOrders"],
+        (old) =>
+          old
+            ? old.map((o) =>
+                o.orderId === orderId ? { ...o, orderStatus: newStatus } : o,
+              )
+            : old,
+      );
+      return { previousOrders };
+    },
     onSuccess: () => {
+      // Sync with backend to ensure cache is accurate
+      queryClient.invalidateQueries({ queryKey: ["allOrders"] });
+    },
+    onError: (_err, _vars, context) => {
+      // Revert the optimistic update on failure
+      if (context?.previousOrders !== undefined) {
+        queryClient.setQueryData(["allOrders"], context.previousOrders);
+      }
       queryClient.invalidateQueries({ queryKey: ["allOrders"] });
     },
   });

@@ -1,7 +1,6 @@
-import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
-import { ShoppingCart, Star } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Loader2, ShoppingCart } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useLoginModal } from "../App";
 import type { PendingCartAction } from "../App";
@@ -20,113 +19,117 @@ interface ProductCardProps {
   inStock?: boolean;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  herbalSupplements: "bg-wellness-green",
-  immunity: "bg-amber-500",
-  digestiveHealth: "bg-teal-600",
-  fitness: "bg-blue-600",
-  multivitamins: "bg-purple-600",
-  ayurvedicCare: "bg-orange-600",
-};
+/** Poll until actor is ready or timeout expires. */
+async function waitForActor(
+  checkReady: () => boolean,
+  pollMs = 200,
+  timeoutMs = 10000,
+): Promise<boolean> {
+  if (checkReady()) return true;
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve) => {
+    const id = setInterval(() => {
+      if (checkReady()) {
+        clearInterval(id);
+        resolve(true);
+      } else if (Date.now() >= deadline) {
+        clearInterval(id);
+        resolve(false);
+      }
+    }, pollMs);
+  });
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export function ProductCard({
   id,
   name,
-  shortDescription,
   price,
   imageUrl,
   categoryLabel,
   inStock = true,
 }: ProductCardProps) {
-  const { openLoginModalWithAction } = useLoginModal();
-  const { identity } = useInternetIdentity();
-  const { addToCart, isAddingToCart } = useCart();
-  const { openDrawer } = useCartDrawer();
   const [imgFailed, setImgFailed] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [addedFeedback, setAddedFeedback] = useState(false);
+  const [retryReady, setRetryReady] = useState(false);
+  const { identity } = useInternetIdentity();
+  const { openLoginModalWithAction } = useLoginModal();
+  const { addToCart, isActorReady } = useCart();
+  const { openDrawer } = useCartDrawer();
 
   const isAuthenticated = !!identity;
 
-  const categoryColorClass =
-    CATEGORY_COLORS[categoryLabel] ?? "bg-wellness-green";
+  const handleAddToCart = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
 
-  // ── Execute the actual add-to-cart + drawer open ──────────────────────────
-  const executeAddToCart = useCallback(
-    async (productId: string, quantity: bigint) => {
-      try {
-        await addToCart(productId, quantity);
-        openDrawer({ id: productId, name, price, imageUrl });
-        setAddedFeedback(true);
-        setTimeout(() => setAddedFeedback(false), 1500);
-      } catch {
-        // useCart.onError already shows the toast
-      }
-    },
-    [addToCart, openDrawer, name, price, imageUrl],
-  );
+    if (!inStock) return;
 
-  // ── Listen for replay events dispatched by PostLoginReplayer ─────────────
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const action = (e as CustomEvent<PendingCartAction>).detail;
-      if (action.type === "addToCart" && action.productId === id) {
-        executeAddToCart(action.productId, action.quantity);
-      }
-    };
-    window.addEventListener("revalife:replayCartAction", handler);
-    return () =>
-      window.removeEventListener("revalife:replayCartAction", handler);
-  }, [id, executeAddToCart]);
+    if (!isAuthenticated) {
+      const action: PendingCartAction = {
+        type: "addToCart",
+        productId: id,
+        quantity: BigInt(1),
+        drawerData: { id, name, price, imageUrl },
+      };
+      openLoginModalWithAction(action);
+      return;
+    }
 
-  const handleAddToCart = useCallback(
-    async (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (!inStock) {
-        toast.error("Product is out of stock");
+    setAdding(true);
+    try {
+      // Wait up to 2 seconds for actor to be ready before first attempt
+      const ready = await waitForActor(() => isActorReady);
+      if (!ready) {
+        setRetryReady(true);
+        toast.error("Loading ho raha hai — thodi der mein retry karo");
         return;
       }
+      setRetryReady(false);
 
-      // ── Pre-auth check: queue action BEFORE attempting mutation ──────────
-      if (!isAuthenticated) {
-        openLoginModalWithAction({
-          type: "addToCart",
-          productId: id,
-          quantity: BigInt(1),
-          drawerData: { id, name, price, imageUrl },
-        });
-        return;
+      // Retry up to 2 times with 400ms delay
+      let lastErr: unknown;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          await addToCart(id, BigInt(1));
+          openDrawer({ id, name, price, imageUrl });
+          setAddedFeedback(true);
+          setTimeout(() => setAddedFeedback(false), 1500);
+          return; // success — exit
+        } catch (err) {
+          lastErr = err;
+          console.warn(
+            `[ProductCard] addToCart attempt ${attempt} failed:`,
+            err,
+          );
+          if (attempt < 2) await sleep(400);
+        }
       }
-
-      await executeAddToCart(id, BigInt(1));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      id,
-      name,
-      price,
-      imageUrl,
-      inStock,
-      isAuthenticated,
-      openLoginModalWithAction,
-      executeAddToCart,
-    ],
-  );
+      // All retries exhausted — show retry button
+      console.error("[ProductCard] addToCart failed after retries:", lastErr);
+      setRetryReady(true);
+      toast.error("Cart mein add nahi hua — retry button pe click karo");
+    } finally {
+      setAdding(false);
+    }
+  };
 
   return (
     <div
-      className="group bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated hover:-translate-y-1.5 transition-all duration-300 flex flex-col border border-border/40"
+      className="group relative rounded-xl overflow-hidden bg-card border border-border/40 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300"
       data-ocid="product.card"
     >
-      {/* Clickable image + content area */}
+      {/* Clickable image + name area → product detail */}
       <Link
         to="/products/$id"
         params={{ id }}
-        className="flex flex-col flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wellness-green focus-visible:ring-inset rounded-2xl"
-        data-ocid="product.view_link"
+        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wellness-green focus-visible:ring-offset-2 rounded-t-xl"
+        tabIndex={0}
+        aria-label={`View ${name} details`}
       >
-        {/* Image container */}
+        {/* Image */}
         <div className="relative aspect-[4/5] overflow-hidden bg-muted">
           {imgFailed ? (
             <ProductImageFallback name={name} categoryLabel={categoryLabel} />
@@ -144,15 +147,6 @@ export function ProductCard({
               onError={() => setImgFailed(true)}
             />
           )}
-          {/* Gradient overlay */}
-          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
-
-          {/* Category badge */}
-          <span
-            className={`absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider text-white uppercase backdrop-blur-sm ${categoryColorClass}/90`}
-          >
-            {categoryLabel.replace(/([A-Z])/g, " $1").trim()}
-          </span>
 
           {/* Out of stock overlay */}
           {!inStock && (
@@ -164,56 +158,45 @@ export function ProductCard({
           )}
         </div>
 
-        {/* Content */}
-        <div className="flex flex-col flex-1 p-4 gap-2">
-          {/* Star rating */}
-          <div className="flex items-center gap-0.5">
-            {[1, 2, 3, 4].map((i) => (
-              <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
-            ))}
-            <Star className="h-3 w-3 text-amber-300 fill-amber-300/40" />
-            <span className="text-[11px] text-muted-foreground ml-1.5 font-medium">
-              4.5
-            </span>
-          </div>
-
-          {/* Product name */}
-          <h3 className="font-semibold text-sm leading-snug line-clamp-2 text-foreground font-display">
+        {/* Product name */}
+        <div className="px-2.5 pt-2.5 pb-1">
+          <h3 className="text-xs font-semibold text-foreground font-display leading-snug line-clamp-2 text-center">
             {name}
           </h3>
-
-          {/* Short description */}
-          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-            {shortDescription}
-          </p>
-
-          <div className="flex-1" />
-
-          {/* Price */}
-          <div className="pt-2">
-            <span className="text-lg font-bold text-wellness-green font-display leading-none">
-              ₹{price.toLocaleString("en-IN")}
-            </span>
-          </div>
         </div>
       </Link>
 
-      {/* Add to Cart button — outside the link */}
-      <div className="px-4 pb-4">
-        <Button
-          size="sm"
+      {/* Add to Cart button — always visible, stops propagation to Link */}
+      <div className="px-2 pb-2.5">
+        <button
+          type="button"
           onClick={handleAddToCart}
-          disabled={isAddingToCart || !inStock}
-          className="w-full rounded-full bg-wellness-green hover:bg-wellness-green-dark text-white text-xs gap-1.5 shadow-xs hover:shadow-card transition-all duration-200 disabled:opacity-60 h-9"
+          disabled={adding || !inStock}
+          aria-label={`Add ${name} to cart`}
           data-ocid="product.add_to_cart_button"
+          className={[
+            "w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200",
+            "border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wellness-green focus-visible:ring-offset-1",
+            addedFeedback
+              ? "bg-wellness-green text-white border-wellness-green"
+              : inStock
+                ? "bg-wellness-green/10 hover:bg-wellness-green hover:text-white text-wellness-green border-wellness-green/40"
+                : "bg-muted text-muted-foreground border-border cursor-not-allowed opacity-50",
+          ].join(" ")}
         >
-          <ShoppingCart className="h-3.5 w-3.5" />
-          {isAddingToCart
-            ? "Adding..."
+          {adding ? (
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+          ) : (
+            <ShoppingCart className="h-3 w-3 shrink-0" />
+          )}
+          {adding
+            ? "Adding…"
             : addedFeedback
-              ? "Added! ✓"
-              : "Add to Cart"}
-        </Button>
+              ? "Added ✓"
+              : retryReady
+                ? "Retry"
+                : "+ Cart"}
+        </button>
       </div>
     </div>
   );

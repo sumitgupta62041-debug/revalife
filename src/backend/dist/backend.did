@@ -171,6 +171,7 @@ service : {
   canCancelOrder: (orderId: text) -> (bool) query;
   canReturnOrder: (orderId: text) -> (bool) query;
   cancelOrder: (orderId: text, reason: opt text) -> (CafResult_1);
+  claimAdminIfNoneExists: () -> (CafResult_1);
   clearCart: () -> ();
   createOrUpdateProfile: (name: text, email: text, phone: text) -> ();
   createOrder: (customerDetails: CustomerDetails, shippingAddress: Address,

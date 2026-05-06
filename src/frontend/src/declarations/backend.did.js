@@ -172,6 +172,7 @@ export const idlService = IDL.Service({
   'canCancelOrder' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'canReturnOrder' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'cancelOrder' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [CafResult_1], []),
+  'claimAdminIfNoneExists' : IDL.Func([], [CafResult_1], []),
   'clearCart' : IDL.Func([], [], []),
   'createOrUpdateProfile' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'createOrder' : IDL.Func(
@@ -428,6 +429,7 @@ export const idlFactory = ({ IDL }) => {
     'canCancelOrder' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'canReturnOrder' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'cancelOrder' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [CafResult_1], []),
+    'claimAdminIfNoneExists' : IDL.Func([], [CafResult_1], []),
     'clearCart' : IDL.Func([], [], []),
     'createOrUpdateProfile' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'createOrder' : IDL.Func(

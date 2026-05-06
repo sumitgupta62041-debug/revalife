@@ -211,7 +211,7 @@ export default function Products() {
 
         {/* ── Grid ──────────────────────────────────────────────── */}
         {isLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
+          <div className="grid grid-cols-4 md:grid-cols-3 lg:grid-cols-5 gap-1 md:gap-5">
             {SKELETON_KEYS.map((k) => (
               <div
                 key={k}
@@ -228,7 +228,7 @@ export default function Products() {
             ))}
           </div>
         ) : filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
+          <div className="grid grid-cols-4 md:grid-cols-3 lg:grid-cols-5 gap-1 md:gap-5">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}

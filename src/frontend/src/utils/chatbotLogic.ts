@@ -124,7 +124,6 @@ let ctx: ConversationContext = createContext();
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function hasWord(text: string, word: string): boolean {
-  // biome-ignore lint/suspicious/noMisleadingCharacterClass: intentional word boundary
   return new RegExp(`\\b${word}\\b`, "i").test(text);
 }
 

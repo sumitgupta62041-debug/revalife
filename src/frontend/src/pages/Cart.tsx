@@ -13,28 +13,123 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Minus, Plus, ShoppingBag, Trash2, Truck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLoginModal } from "../App";
 import { useCart } from "../hooks/useCart";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
+// ─── Debounced qty control ─────────────────────────────────────────────────────
+// Pattern:
+//   1. localQty updates instantly on every click — immediate visual feedback.
+//   2. A debounce timer (600ms) fires a single backend call after user stops.
+//   3. Each new click cancels the previous debounce — no queued out-of-order calls.
+//   4. isSyncing disables buttons while the backend call is in-flight.
+//   5. On error: revert localQty to last known good qty.
+
+interface QtyControlProps {
+  productId: string;
+  initialQty: number;
+  onUpdate: (productId: string, qty: bigint) => Promise<void>;
+  onRemove?: (productId: string) => void;
+  index: number;
+}
+
+function QtyControl({
+  productId,
+  initialQty,
+  onUpdate,
+  onRemove,
+  index,
+}: QtyControlProps) {
+  const [localQty, setLocalQty] = useState(initialQty);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Tracks the last stable qty from the server (for error revert)
+  const lastGoodQtyRef = useRef(initialQty);
+  // Holds the debounce timer so each click can cancel the previous one
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether we have a local change pending sync
+  const isPendingRef = useRef(false);
+
+  // Sync from server only when not pending local change
+  useEffect(() => {
+    if (!isPendingRef.current && !isSyncing) {
+      setLocalQty(initialQty);
+      lastGoodQtyRef.current = initialQty;
+    }
+  }, [initialQty, isSyncing]);
+
+  const handleClick = (delta: number) => {
+    const newQty = localQty + delta;
+
+    if (newQty < 1) {
+      // Cancel any pending debounce and remove item
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      isPendingRef.current = false;
+      onRemove?.(productId);
+      return;
+    }
+
+    // Instant UI feedback
+    setLocalQty(newQty);
+    isPendingRef.current = true;
+
+    // Cancel previous debounce — only the final value after user stops gets sent
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+
+    debounceTimerRef.current = setTimeout(async () => {
+      setIsSyncing(true);
+      try {
+        await onUpdate(productId, BigInt(newQty));
+        lastGoodQtyRef.current = newQty;
+      } catch {
+        // Revert to last known good on error
+        setLocalQty(lastGoodQtyRef.current);
+        toast.error("Could not update quantity. Please try again.");
+      } finally {
+        setIsSyncing(false);
+        isPendingRef.current = false;
+      }
+    }, 600);
+  };
+
+  return (
+    <div className="flex items-center border border-border rounded-full overflow-hidden bg-background shadow-xs">
+      <button
+        type="button"
+        onClick={() => handleClick(-1)}
+        disabled={localQty <= 1 || isSyncing}
+        className="h-8 w-8 flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
+        data-ocid={`cart.qty_minus.${index + 1}`}
+        aria-label="Decrease quantity"
+      >
+        <Minus className="h-3 w-3" />
+      </button>
+      <span className="px-3 text-sm font-semibold tabular-nums min-w-[2rem] text-center select-none">
+        {localQty}
+      </span>
+      <button
+        type="button"
+        onClick={() => handleClick(1)}
+        disabled={isSyncing}
+        className="h-8 w-8 flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
+        data-ocid={`cart.qty_plus.${index + 1}`}
+        aria-label="Increase quantity"
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+// ─── Cart page ────────────────────────────────────────────────────────────────
+
 export default function Cart() {
   const navigate = useNavigate();
-  const { cart, isLoading, updateQuantity, removeItem, isUpdating } = useCart();
+  const { cart, isLoading, updateQuantity, removeItem } = useCart();
   const { identity } = useInternetIdentity();
   const { openLoginModal } = useLoginModal();
-
-  const handleUpdateQuantity = async (
-    productId: string,
-    newQuantity: number,
-  ) => {
-    if (newQuantity < 1) return;
-    try {
-      await updateQuantity(productId, BigInt(newQuantity));
-    } catch {
-      toast.error("Failed to update quantity");
-    }
-  };
 
   const handleRemoveItem = async (productId: string) => {
     try {
@@ -153,42 +248,14 @@ export default function Cart() {
 
                 {/* Qty controls + line total + remove */}
                 <div className="shrink-0 flex flex-col items-end gap-3">
-                  {/* Quantity pill */}
-                  <div className="flex items-center border border-border rounded-full overflow-hidden bg-background shadow-xs">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleUpdateQuantity(
-                          item.product.id,
-                          Number(item.quantity) - 1,
-                        )
-                      }
-                      disabled={isUpdating || Number(item.quantity) <= 1}
-                      className="h-8 w-8 flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
-                      data-ocid={`cart.qty_minus.${index + 1}`}
-                      aria-label="Decrease quantity"
-                    >
-                      <Minus className="h-3 w-3" />
-                    </button>
-                    <span className="px-3 text-sm font-semibold tabular-nums min-w-[2rem] text-center">
-                      {Number(item.quantity)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleUpdateQuantity(
-                          item.product.id,
-                          Number(item.quantity) + 1,
-                        )
-                      }
-                      disabled={isUpdating}
-                      className="h-8 w-8 flex items-center justify-center hover:bg-muted disabled:opacity-40 transition-colors"
-                      data-ocid={`cart.qty_plus.${index + 1}`}
-                      aria-label="Increase quantity"
-                    >
-                      <Plus className="h-3 w-3" />
-                    </button>
-                  </div>
+                  {/* Debounced quantity control — instant local feedback, backend synced after 600ms */}
+                  <QtyControl
+                    productId={item.product.id}
+                    initialQty={Number(item.quantity)}
+                    onUpdate={updateQuantity}
+                    onRemove={handleRemoveItem}
+                    index={index}
+                  />
 
                   {/* Line total */}
                   <span className="text-sm font-bold text-foreground">

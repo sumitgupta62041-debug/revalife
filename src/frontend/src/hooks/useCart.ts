@@ -59,6 +59,22 @@ function guestCartToCartData(items: GuestCartItem[]): CartData {
   return { items: pwq, subtotal };
 }
 
+// ─── Cache helpers ────────────────────────────────────────────────────────────
+
+/** Recalculate subtotal from items array */
+function recalcSubtotal(items: ProductWithQuantity[]): bigint {
+  return items.reduce(
+    (acc, i) => acc + i.product.price * i.quantity,
+    BigInt(0),
+  );
+}
+
+/** Apply an optimistic removal to a CartData snapshot */
+function applyOptimisticRemove(prev: CartData, productId: string): CartData {
+  const items = prev.items.filter((i) => i.product.id !== productId);
+  return { items, subtotal: recalcSubtotal(items) };
+}
+
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useCart() {
@@ -133,8 +149,9 @@ export function useCart() {
 
       // Authenticated path — must have both actor AND identity
       if (!actor) {
-        throw new Error("NOT_AUTHENTICATED");
+        throw new Error("Actor not ready. Please wait a moment and try again.");
       }
+
       return actor.addToCart(productId, quantity);
     },
     // Optimistic update for guest cart
@@ -172,11 +189,25 @@ export function useCart() {
           queryClient.setQueryData<CartData>(["cart"], context.previous);
         }
       }
-      // NOT_AUTHENTICATED errors are handled upstream (ProductCard / ProductDetail
-      // pre-check auth before calling addToCart and show the login modal instead).
-      // We suppress the toast here so the user never sees a confusing error message.
-      if (err instanceof Error && err.message === "NOT_AUTHENTICATED") return;
-      toast.error("Could not add to cart. Please try again.");
+
+      if (err instanceof Error && err.message.includes("Actor not ready")) {
+        toast.error("Still loading — please try again in a moment.");
+        return;
+      }
+
+      const message =
+        err instanceof Error ? err.message : "Could not add to cart.";
+
+      // Specific error for product-not-found — usually means backend reset
+      if (
+        message.toLowerCase().includes("product does not") ||
+        message.toLowerCase().includes("not found")
+      ) {
+        toast.error("Product not found — please refresh the page");
+        return;
+      }
+
+      toast.error(`Add to cart failed: ${message}. Please try again.`);
     },
     onSuccess: (_data, _vars, context) => {
       if (context?.isGuest) {
@@ -187,7 +218,11 @@ export function useCart() {
     },
   });
 
-  // ── Update quantity ───────────────────────────────────────────────────────
+  // ── Update quantity — simple: fire backend, invalidate on success ──────────
+  // No optimistic updates: the QtyControl component already shows localQty
+  // instantly, so the user sees responsive UI without cache manipulation.
+  // This eliminates the optimistic collision bug where out-of-order responses
+  // overwrite the correct quantity in the cache.
   const updateQuantityMutation = useMutation({
     mutationFn: async ({
       productId,
@@ -199,8 +234,7 @@ export function useCart() {
         if (existing) {
           existing.quantity = Number(quantity);
           if (existing.quantity <= 0) {
-            const filtered = items.filter((i) => i.productId !== productId);
-            writeGuestCart(filtered);
+            writeGuestCart(items.filter((i) => i.productId !== productId));
           } else {
             writeGuestCart(items);
           }
@@ -214,12 +248,13 @@ export function useCart() {
       toast.error("Could not update quantity. Please try again.");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cart"] });
-      queryClient.invalidateQueries({ queryKey: ["guestCart"] });
+      // Invalidate so React Query fetches fresh authoritative data from backend
+      const queryKey = isAuthenticated ? ["cart"] : ["guestCart"];
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 
-  // ── Remove item ──────────────────────────────────────────────────────────
+  // ── Remove item (with optimistic UI + selective cache update) ─────────────
   const removeItemMutation = useMutation({
     mutationFn: async (productId: string) => {
       if (!isAuthenticated) {
@@ -230,12 +265,39 @@ export function useCart() {
       if (!actor) throw new Error("Actor not available");
       return actor.removeFromCart(productId);
     },
-    onError: () => {
+    // ── Optimistic update: remove from cache INSTANTLY ────────────────────
+    onMutate: async (productId) => {
+      const queryKey = isAuthenticated ? ["cart"] : ["guestCart"];
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<CartData>(queryKey);
+
+      if (previous) {
+        queryClient.setQueryData<CartData>(
+          queryKey,
+          applyOptimisticRemove(previous, productId),
+        );
+      }
+
+      return { previous, queryKey };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<CartData>(context.queryKey, context.previous);
+      }
       toast.error("Could not remove item. Please try again.");
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cart"] });
-      queryClient.invalidateQueries({ queryKey: ["guestCart"] });
+    onSuccess: (_data, productId, context) => {
+      const queryKey =
+        context?.queryKey ?? (isAuthenticated ? ["cart"] : ["guestCart"]);
+      const current = queryClient.getQueryData<CartData>(queryKey);
+      if (current) {
+        queryClient.setQueryData<CartData>(
+          queryKey,
+          applyOptimisticRemove(current, productId),
+        );
+      } else {
+        queryClient.invalidateQueries({ queryKey });
+      }
     },
   });
 
